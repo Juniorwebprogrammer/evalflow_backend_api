@@ -18,7 +18,6 @@ public static class DependencyInjectionExtensions
         services.AddScoped<IJwtProvider, JwtProvider>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IPasswordHasser, PasswordHasher>();
-        services.AddScoped<IEmailService, BrevoSmtpEmailService>();
         services.AddScoped<IEncryptionService, AesEncryptionService>();
         
         // Agregar servicios core (tu extensión existente)
@@ -73,6 +72,12 @@ public static class DependencyInjectionExtensions
         {
             options.AddPolicy("SignalR", policy =>
                 policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
+        });
+
+        services.AddHttpClient<IEmailService, BrevoApiEmailService>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.brevo.com/v3/");
+            client.Timeout = TimeSpan.FromSeconds(15);
         });
 
         services.AddHttpContextAccessor();
