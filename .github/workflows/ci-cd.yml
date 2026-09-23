@@ -151,11 +151,21 @@ jobs:
       KOYEB_TOKEN: ${{ secrets.KOYEB_API_TOKEN }}
     steps:
       - name: Comprobar configuración de Koyeb
+        id: cfg
+        env:
+          RAW_APP: ${{ vars.KOYEB_APP }}
+          RAW_SERVICE: ${{ vars.KOYEB_SERVICE }}
+          RAW_URL: ${{ vars.KOYEB_PUBLIC_URL }}
         run: |
-          if [ -z "${{ vars.KOYEB_APP }}" ] || [ -z "${{ vars.KOYEB_SERVICE }}" ] || [ -z "$KOYEB_TOKEN" ]; then
+          # Quitamos espacios y saltos de línea que se cuelan al pegar valores en GitHub.
+          trim() { printf '%s' "$1" | tr -d '[:space:]'; }
+          app=$(trim "$RAW_APP"); service=$(trim "$RAW_SERVICE"); url=$(trim "$RAW_URL")
+          if [ -z "$app" ] || [ -z "$service" ] || [ -z "$KOYEB_TOKEN" ]; then
             echo "::error::Faltan KOYEB_APP / KOYEB_SERVICE (variables) o KOYEB_API_TOKEN (secret) en el environment Production."
             exit 1
           fi
+          echo "service=$app/$service" >> "$GITHUB_OUTPUT"
+          echo "url=${url%/}" >> "$GITHUB_OUTPUT"
 
       - name: Instalar Koyeb CLI
         run: |
@@ -166,17 +176,17 @@ jobs:
 
       - name: Desplegar nueva imagen
         run: |
-          koyeb services update "${{ vars.KOYEB_APP }}/${{ vars.KOYEB_SERVICE }}" \
+          koyeb services update "${{ steps.cfg.outputs.service }}" \
             --docker "$IMAGE_NAME:${{ github.sha }}" \
             --wait --wait-timeout 10m
 
       - name: Smoke test en producción
-        if: vars.KOYEB_PUBLIC_URL != ''
+        if: steps.cfg.outputs.url != ''
         run: |
           for i in $(seq 1 12); do
-            if curl -fsS "${{ vars.KOYEB_PUBLIC_URL }}/" > /dev/null; then
+            if curl -fsS "${{ steps.cfg.outputs.url }}/" > /dev/null; then
               echo "✅ Producción responde"; exit 0
             fi
             sleep 5
           done
-          echo "::error::${{ vars.KOYEB_PUBLIC_URL }} no responde"; exit 1
+          echo "::error::${{ steps.cfg.outputs.url }} no responde"; exit 1
