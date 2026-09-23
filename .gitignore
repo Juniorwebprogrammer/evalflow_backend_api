@@ -50,3 +50,6 @@ appsettings.*.local.json
 ## OS cruft
 .DS_Store
 Thumbs.db
+
+## Backups de base de datos (scripts/migrate-neon.sh)
+backups/
