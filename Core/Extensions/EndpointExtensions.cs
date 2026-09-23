@@ -15,6 +15,7 @@ using evalflow_backend_api.Features.Dashboard.GetDashboardStats;
 using evalflow_backend_api.Features.Departments.CreateDepartment;
 using evalflow_backend_api.Features.Departments.GetAllDepartments;
 using evalflow_backend_api.Features.Departments.GetDepartment;
+using evalflow_backend_api.Features.EvaluationComparisons.GetCycleComparisons;
 using evalflow_backend_api.Features.EvaluationCycles.CreateEvaluationCycle;
 using evalflow_backend_api.Features.EvaluationCycles.DeleteEvaluationCycle;
 using evalflow_backend_api.Features.EvaluationCycles.GetAllEvaluationCycles;
@@ -154,6 +155,7 @@ public static class EndpointExtensions
         app.MapSaveSubmissionAnswers();
         app.MapDeleteSubmission();
         app.MapGetCycleSubmissions();
+        app.MapGetCycleComparisons();
 
         // Dashboard
         app.MapGetDashboardStats();

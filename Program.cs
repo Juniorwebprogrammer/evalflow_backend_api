@@ -1,4 +1,5 @@
 using evalflow_backend_api.Core.Extensions; 
+using evalflow_backend_api.Infrastructure.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,6 +10,8 @@ builder.Services.AddSignalR();
 var app = builder.Build();
 
 // --- 2. PIPELINE DE PETICIONES HTTP ---
+app.UseMiddleware<RequestLoggingMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
