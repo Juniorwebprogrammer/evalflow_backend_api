@@ -10,11 +10,13 @@ WORKDIR /src
 
 # Copiamos solo el csproj primero para cachear el restore
 COPY ["evalflow_backend_api.csproj", "./"]
-RUN dotnet restore "./evalflow_backend_api.csproj"
+RUN dotnet restore "./evalflow_backend_api.csproj" -r linux-x64 -p:PublishReadyToRun=true
 
 # Copiamos el resto del código y publicamos
 COPY . .
-RUN dotnet publish "evalflow_backend_api.csproj" -c $BUILD_CONFIGURATION -o /app/publish --no-restore /p:UseAppHost=false
+# ReadyToRun: precompila a código nativo para no gastar CPU en JIT (la instancia de Koyeb tiene 0.1 vCPU)
+RUN dotnet publish "evalflow_backend_api.csproj" -c $BUILD_CONFIGURATION -o /app/publish --no-restore \
+    -r linux-x64 --self-contained false -p:PublishReadyToRun=true /p:UseAppHost=false
 
 # Etapa 3: Final (sin privilegios de root)
 FROM base AS final
