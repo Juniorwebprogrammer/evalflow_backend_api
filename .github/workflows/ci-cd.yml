@@ -137,7 +137,8 @@ jobs:
             ${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
 
-  # 4) Despliega en Koyeb la imagen exacta que se acaba de probar (tag = SHA del commit).
+  # 4) Despliega en Koyeb la imagen exacta que se acaba de probar (tag = SHA del commit)
+  #    y espera a que el deploy quede sano. Si Koyeb lo marca como fallido, el job falla.
   deploy:
     name: Deploy a Koyeb
     needs: push
@@ -146,23 +147,36 @@ jobs:
     environment: Production
     env:
       IMAGE_NAME: ${{ vars.DOCKERHUB_USERNAME }}/evalflow-backend-api
+      KOYEB_CLI_VERSION: 5.12.0
+      KOYEB_TOKEN: ${{ secrets.KOYEB_API_TOKEN }}
     steps:
       - name: Comprobar configuración de Koyeb
-        id: check
         run: |
-          if [ -z "${{ vars.KOYEB_APP }}" ] || [ -z "${{ vars.KOYEB_SERVICE }}" ]; then
-            echo "::warning::KOYEB_APP / KOYEB_SERVICE no configurados; se omite el deploy."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+          if [ -z "${{ vars.KOYEB_APP }}" ] || [ -z "${{ vars.KOYEB_SERVICE }}" ] || [ -z "$KOYEB_TOKEN" ]; then
+            echo "::error::Faltan KOYEB_APP / KOYEB_SERVICE (variables) o KOYEB_API_TOKEN (secret) en el environment Production."
+            exit 1
           fi
 
       - name: Instalar Koyeb CLI
-        if: steps.check.outputs.skip != 'true'
-        uses: koyeb-community/koyeb-actions@v2
-        with:
-          api_token: ${{ secrets.KOYEB_API_TOKEN }}
+        run: |
+          curl -fsSL "https://github.com/koyeb/koyeb-cli/releases/download/v${KOYEB_CLI_VERSION}/koyeb-cli_${KOYEB_CLI_VERSION}_linux_amd64.tar.gz" \
+            | tar xz -C "$RUNNER_TEMP" koyeb
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/koyeb" version
 
-      - name: Actualizar servicio
-        if: steps.check.outputs.skip != 'true'
+      - name: Desplegar nueva imagen
         run: |
           koyeb services update "${{ vars.KOYEB_APP }}/${{ vars.KOYEB_SERVICE }}" \
-            --docker "$IMAGE_NAME:${{ github.sha }}"
+            --docker "$IMAGE_NAME:${{ github.sha }}" \
+            --wait --wait-timeout 10m
+
+      - name: Smoke test en producción
+        if: vars.KOYEB_PUBLIC_URL != ''
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS "${{ vars.KOYEB_PUBLIC_URL }}/" > /dev/null; then
+              echo "✅ Producción responde"; exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::${{ vars.KOYEB_PUBLIC_URL }} no responde"; exit 1

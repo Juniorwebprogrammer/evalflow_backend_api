@@ -24,7 +24,17 @@ public static class AppSetupExtensions
     {
         using var scope = app.Services.CreateScope();
         var services = scope.ServiceProvider;
-        var logger = services.GetRequiredService<ILogger<AppDbContext>>(); 
+        var logger = services.GetRequiredService<ILogger<AppDbContext>>();
+
+        // Sin cadena de conexión no tiene sentido arrancar: fallamos para que el deploy
+        // (Koyeb, docker compose...) se marque como fallido en vez de quedar "healthy" sin DB.
+        var dbContext = services.GetRequiredService<AppDbContext>();
+        if (dbContext.Database.IsRelational() && string.IsNullOrWhiteSpace(dbContext.Database.GetConnectionString()))
+        {
+            throw new InvalidOperationException(
+                "Falta la cadena de conexión 'ConnectionStrings:DefaultConnection' " +
+                "(variable de entorno ConnectionStrings__DefaultConnection).");
+        }
 
         try
         {
