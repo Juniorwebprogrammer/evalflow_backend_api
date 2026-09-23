@@ -15,7 +15,7 @@ services:
     restart: unless-stopped
 
   evalflow-db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -23,7 +23,8 @@ services:
     ports:
       - "${LOCAL_DB_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Postgres 18 guarda los datos en /var/lib/postgresql/18/docker; se monta el directorio padre.
+      - postgres18_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -31,4 +32,4 @@ services:
       retries: 10
 
 volumes:
-  postgres_data:
+  postgres18_data:

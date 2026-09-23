@@ -8,8 +8,10 @@
 #
 # No toca el origen: si algo sale mal, la base antigua sigue intacta.
 #
-# Uso: ./scripts/migrate-neon.sh [--force]
-#   --force  restaura aunque el destino ya tenga tablas (pueden aparecer conflictos).
+# Uso: ./scripts/migrate-neon.sh [--reset-target]
+#   --reset-target  si el destino ya tiene tablas (p. ej. porque la API ya ejecutó sus
+#                   migraciones allí), muestra sus filas, pide confirmación y BORRA el
+#                   esquema public del destino antes de restaurar.
 #
 # Variables en .env:
 #   NEON_DATABASE_URL         origen  (postgresql://usuario:pass@host/db?sslmode=require)
@@ -21,8 +23,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; source .env; set +a
 
-FORCE=false
-[ "${1:-}" = "--force" ] && FORCE=true
+RESET_TARGET=false
+[ "${1:-}" = "--reset-target" ] && RESET_TARGET=true
 
 : "${NEON_DATABASE_URL:?Falta NEON_DATABASE_URL (origen) en .env}"
 : "${NEON_TARGET_DATABASE_URL:?Falta NEON_TARGET_DATABASE_URL (destino) en .env}"
@@ -55,7 +57,7 @@ mkdir -p backups
 # --- 1. Versiones ---------------------------------------------------------------
 # psql de cualquier versión reciente puede consultar la versión del servidor.
 server_major() {
-  pg postgres:17-alpine sh -c "psql \"\$$1\" -XAtq -c 'SHOW server_version_num'" | cut -c1-2
+  pg postgres:18-alpine sh -c "psql \"\$$1\" -XAtq -c 'SHOW server_version_num'" | cut -c1-2
 }
 SRC_MAJOR=$(server_major SRC_URL)
 DST_MAJOR=$(server_major DST_URL)
@@ -69,11 +71,26 @@ fi
 # pg_dump tiene que ser de la misma versión que el servidor de origen o más nueva.
 PG_IMAGE="postgres:${DST_MAJOR}-alpine"
 
+# Conteo exacto de filas por tabla del esquema public, ordenado.
+COUNT_SQL="SELECT format('SELECT %L AS t, count(*) FROM public.%I', tablename, tablename) FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename \\gexec"
+count_rows() {
+  pg "$PG_IMAGE" sh -c "psql \"\$$1\" -XAtq -F ' ' -v ON_ERROR_STOP=1" <<< "$COUNT_SQL" | sort
+}
+print_counts() { awk '{ printf "   %-40s %s\n", $1, $2 }'; }
+
 # --- 2. Destino vacío -----------------------------------------------------------
 DST_TABLES=$(pg "$PG_IMAGE" sh -c "psql \"\$DST_URL\" -XAtq -c \"SELECT count(*) FROM pg_tables WHERE schemaname = 'public'\"")
-if [ "$DST_TABLES" != "0" ] && [ "$FORCE" != "true" ]; then
-  echo "❌ El destino ya tiene $DST_TABLES tablas en 'public'. Usa un proyecto nuevo o ejecuta con --force." >&2
-  exit 1
+if [ "$DST_TABLES" != "0" ]; then
+  echo "⚠️  El destino ya tiene $DST_TABLES tablas en 'public':"
+  count_rows DST_URL | print_counts
+  if [ "$RESET_TARGET" != "true" ]; then
+    echo "❌ Revisa que no haya datos que quieras conservar y vuelve a ejecutar con --reset-target." >&2
+    exit 1
+  fi
+  read -r -p "¿BORRAR todo el esquema public del DESTINO ($(host_of "$DST_URL"))? Escribe 'borrar': " answer
+  [ "$answer" = "borrar" ] || { echo "Cancelado."; exit 0; }
+  pg "$PG_IMAGE" sh -c "psql \"\$DST_URL\" -Xq -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE' -c 'CREATE SCHEMA public'"
+  echo "🗑️  Esquema public del destino vaciado."
 fi
 
 echo
@@ -92,12 +109,6 @@ echo "📤 Restaurando en destino (una sola transacción)..."
 pg "$PG_IMAGE" sh -c "pg_restore --dbname=\"\$DST_URL\" --no-owner --no-acl --single-transaction --exit-on-error /backups/$DUMP_FILE"
 
 # --- 4. Verificación ------------------------------------------------------------
-# Conteo exacto de filas por tabla del esquema public, ordenado, en ambos lados.
-COUNT_SQL="SELECT format('SELECT %L AS t, count(*) FROM public.%I', tablename, tablename) FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename \\gexec"
-count_rows() {
-  pg "$PG_IMAGE" sh -c "psql \"\$$1\" -XAtq -F ' ' -v ON_ERROR_STOP=1" <<< "$COUNT_SQL" | sort
-}
-
 echo "🔢 Comparando filas por tabla..."
 SRC_COUNTS=$(count_rows SRC_URL)
 DST_COUNTS=$(count_rows DST_URL)
@@ -108,7 +119,7 @@ if [ "$SRC_COUNTS" != "$DST_COUNTS" ]; then
   exit 1
 fi
 
-echo "$DST_COUNTS" | awk '{ printf "   %-40s %s\n", $1, $2 }'
+echo "$DST_COUNTS" | print_counts
 echo
 echo "✅ Migración completada. Backup en backups/$DUMP_FILE"
 echo
