@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+        <PackageReference Include="xunit" Version="2.9.2" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Moq" Version="4.20.72" />
+        <PackageReference Include="FluentAssertions" Version="6.12.1" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.3" />
+        <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\evalflow_backend_api.csproj" />
+    </ItemGroup>
+
+    <!--
+      Several handlers read email templates off disk relative to the working directory (see e.g.
+      LoginHandler's 2FA email, GenerateSubmissionsHandler's assignment email). Mirror the whole
+      folder into the test output (via a glob, so newly-added templates stay covered automatically)
+      so those code paths work under `dotnet test` too, not just when running the API itself.
+    -->
+    <ItemGroup>
+        <None Include="..\Infrastructure\Notifications\Templates\*.html" Link="Infrastructure\Notifications\Templates\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+    <ItemGroup>
+      <Content Include="..\.dockerignore">
+        <Link>.dockerignore</Link>
+      </Content>
+    </ItemGroup>
+
+</Project>

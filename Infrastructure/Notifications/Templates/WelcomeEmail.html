@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bienvenido a EvalFlow</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f3f4f6; -webkit-font-smoothing: antialiased;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f3f4f6; padding: 40px 20px;">
+    <tr>
+        <td align="center">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); overflow: hidden;">
+                <tr>
+                    <td align="center" style="padding: 40px 0 20px 0; background-color: #ffffff;">
+                        <h1 style="margin: 0; color: #111827; font-size: 28px; font-weight: 800; letter-spacing: -1px;">
+                            Eval<span style="color: #2563eb;">Flow</span>
+                        </h1>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 20px 40px 40px 40px;">
+                        <h2 style="margin: 0 0 20px 0; color: #1f2937; font-size: 20px; font-weight: 600;">
+                            ¡Bienvenido a bordo, {{UserNombre}}! 🚀
+                        </h2>
+                        <p style="margin: 0 0 24px 0; color: #4b5563; font-size: 16px; line-height: 24px;">
+                            Tu espacio de trabajo para <strong>{{CompanyNombre}}</strong> ha sido creado con éxito. Estamos encantados de tenerte con nosotros.
+                        </p>
+                        <p style="margin: 0 0 32px 0; color: #4b5563; font-size: 16px; line-height: 24px;">
+                            Para mantener la seguridad de tu cuenta y empezar a invitar a tu equipo, necesitamos que confirmes tu dirección de correo electrónico haciendo clic en el siguiente botón:
+                        </p>
+                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                            <tr>
+                                <td align="center">
+                                    <a href="{{ValidationLink}}" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 16px; font-weight: 600; text-decoration: none; padding: 14px 32px; border-radius: 8px; transition: background-color 0.2s;">
+                                        Verificar mi cuenta
+                                    </a>
+                                </td>
+                            </tr>
+                        </table>
+                        <p style="margin: 32px 0 0 0; color: #6b7280; font-size: 14px; line-height: 20px;">
+                            Si el botón no funciona, copia y pega este enlace en tu navegador:<br>
+                            <a href="{{ValidationLink}}" style="color: #2563eb; text-decoration: underline; word-break: break-all;">{{ValidationLink}}</a>
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="background-color: #f9fafb; padding: 30px 40px; border-top: 1px solid #e5e7eb;">
+                        <p style="margin: 0 0 10px 0; color: #9ca3af; font-size: 13px; text-align: center;">
+                            Si no te has registrado en EvalFlow, puedes ignorar este correo de forma segura.
+                        </p>
+                        <p style="margin: 0; color: #9ca3af; font-size: 13px; text-align: center;">
+                            &copy; {{Year}} EvalFlow. Todos los derechos reservados.
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

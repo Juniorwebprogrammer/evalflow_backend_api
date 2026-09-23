@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+        <UserSecretsId>evalflow-backend-api</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
+        <PackageReference Include="MailKit" Version="4.17.0" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+        
+        <PackageReference Include="MediatR" Version="12.4.0" />
+        
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+        
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3" />
+        <None Update="Infrastructure\Notifications\Templates\WelcomeEmail.html">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="Infrastructure\Notifications\Templates\TwoFactorEmail.html">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="Infrastructure\Notifications\Templates\InviteEmail.html">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="Infrastructure\Notifications\Templates\PasswordRecovery.html">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="Infrastructure\Notifications\Templates\EvaluationAssignedEmail.html">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="evalflow_backend_api.Tests" />
+    </ItemGroup>
+
+    <!-- The test project lives in a subfolder; keep the SDK's default globs from also pulling its files into this project. -->
+    <ItemGroup>
+        <Compile Remove="evalflow_backend_api.Tests\**\*.cs" />
+        <Content Remove="evalflow_backend_api.Tests\**" />
+        <None Remove="evalflow_backend_api.Tests\**" />
+    </ItemGroup>
+
+</Project>

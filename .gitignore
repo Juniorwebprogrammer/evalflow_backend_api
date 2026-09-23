@@ -1,0 +1,52 @@
+## .NET build outputs (covers evalflow_backend_api.Tests too, since it's nested)
+bin/
+obj/
+
+## Rider / IntelliJ
+.idea/
+
+## Visual Studio
+.vs/
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Per-user project/solution settings (shared .DotSettings stays tracked)
+*.user
+*.DotSettings.user
+
+## ReSharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+
+## NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+## Build configs / artifacts
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+x64/
+x86/
+[Ll]og/
+[Ll]ogs/
+
+## Test results
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+
+## ASP.NET Core local secrets (if you switch to `dotnet user-secrets` / .env for local dev)
+appsettings.*.local.json
+.env
+*.pfx
+
+## OS cruft
+.DS_Store
+Thumbs.db
