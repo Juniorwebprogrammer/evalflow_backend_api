@@ -26,8 +26,4 @@ public class Template
     public ICollection<EvaluationCycle> Ciclos { get; set; } = new List<EvaluationCycle>();
 
     public ICollection<Question> Preguntas { get; set; } = new List<Question>();
-    
-    // public int? CicloId { get; set; }
-
-    // public ICollection<Question> Preguntas { get; set; } = new List<Question>();
 }

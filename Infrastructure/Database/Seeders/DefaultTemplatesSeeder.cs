@@ -27,10 +27,12 @@ public static class DefaultTemplatesSeeder
         EmpresaID = companyId,
         Titulo = "Plantilla Estándar 180° (Solo Mánager)",
         Descripcion = "Evaluación unidireccional enfocada en el rendimiento operativo.",
+        FechaInicio = DateTime.UtcNow,
+        FechaFin = DateTime.UtcNow.AddDays(1),
         Preguntas = new List<Question>
         {
             new() { Texto = "¿Cumple con los objetivos establecidos?", Tipo = QuestionType.Estrellas, Orden = 1 },
-            new() { Texto = "Puntos fuertes a destacar", Tipo = QuestionType.Seleccion, Orden = 2 }
+            new() { Texto = "¿Es puntual en su llegada?", Tipo = QuestionType.Seleccion, Orden = 2, Opciones = ["Sí", "No"]}
         }
     };
 
@@ -39,11 +41,13 @@ public static class DefaultTemplatesSeeder
         EmpresaID = companyId,
         Titulo = "Plantilla Integral 360°",
         Descripcion = "Evaluación completa incluyendo autopercepción.",
+        FechaInicio = DateTime.UtcNow,
+        FechaFin = DateTime.UtcNow.AddDays(1),
         Preguntas = new List<Question>
         {
             new() { Texto = "Nivel de proactividad en el último trimestre", Tipo = QuestionType.Escala1a5, Orden = 1 },
             new() { Texto = "¿Cómo calificarías la comunicación con el equipo?", Tipo = QuestionType.Estrellas, Orden = 2 },
-            new() { Texto = "Áreas de mejora identificadas", Tipo = QuestionType.Seleccion, Orden = 3 }
+            new() { Texto = "¿Es puntual en su llegada?", Tipo = QuestionType.Seleccion, Orden = 3, Opciones = ["Sí", "No"] }
         }
     };
 
@@ -52,11 +56,13 @@ public static class DefaultTemplatesSeeder
         EmpresaID = companyId,
         Titulo = "Plantilla de Autoevaluación",
         Descripcion = "Evaluación de autopercepción para que el propio empleado valore su desempeño.",
+        FechaInicio = DateTime.UtcNow,
+        FechaFin = DateTime.UtcNow.AddDays(1),
         Preguntas = new List<Question>
         {
             new() { Texto = "¿Consideras que has cumplido tus objetivos en este periodo?", Tipo = QuestionType.Estrellas, Orden = 1 },
             new() { Texto = "¿Qué logros destacarías de tu propio desempeño?", Tipo = QuestionType.Seleccion, Orden = 2 },
-            new() { Texto = "¿En qué áreas te gustaría mejorar?", Tipo = QuestionType.Seleccion, Orden = 3 }
+            new() { Texto = "¿Es puntual en su llegada?", Tipo = QuestionType.Seleccion, Orden = 3, Opciones = ["Sí", "No"]}
         }
     };
 }
