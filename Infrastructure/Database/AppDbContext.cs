@@ -18,6 +18,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<EvaluationSubmission> EvaluationSubmissions => Set<EvaluationSubmission>();
     public DbSet<Answer> Answers => Set<Answer>();
     public DbSet<ClarificationRequest> ClarificationRequests => Set<ClarificationRequest>();
+    public DbSet<EmailOutboxMessage> EmailOutboxMessages => Set<EmailOutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -138,6 +139,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .OnDelete(DeleteBehavior.NoAction);
 
             entity.HasIndex(c => new { c.EvaluationCycleId, c.EvaluatedUserId });
+        });
+
+        modelBuilder.Entity<EmailOutboxMessage>(entity =>
+        {
+            entity.HasIndex(m => new { m.Status, m.NextAttemptAt });
         });
     }
 }

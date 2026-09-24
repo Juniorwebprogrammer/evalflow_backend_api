@@ -2,7 +2,7 @@ using System.Net.Http.Json;
 
 namespace evalflow_backend_api.Infrastructure.Notifications;
 
-public class BrevoApiEmailService(HttpClient httpClient, IConfiguration configuration) : IEmailService
+public class BrevoApiEmailService(HttpClient httpClient, IConfiguration configuration) : IEmailSender
 {
     public async Task SendEmailAsync(string to, string subject, string htmlBody, CancellationToken cancellationToken = default)
     {

@@ -75,7 +75,9 @@ public static class DependencyInjectionExtensions
                 policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
         });
 
-        services.AddHttpClient<IEmailService, BrevoApiEmailService>(client =>
+        services.AddSingleton<EmailQueueSignal>();
+        services.AddScoped<IEmailService, QueuedEmailService>();
+        services.AddHttpClient<IEmailSender, BrevoApiEmailService>(client =>
         {
             client.BaseAddress = new Uri("https://api.brevo.com/v3/");
             client.Timeout = TimeSpan.FromSeconds(15);
@@ -88,6 +90,7 @@ public static class DependencyInjectionExtensions
 
         services.AddHttpContextAccessor();
         services.AddHostedService<EvaluationReminderJob>();
+        services.AddHostedService<EmailQueueWorker>();
         
         return services;
     }

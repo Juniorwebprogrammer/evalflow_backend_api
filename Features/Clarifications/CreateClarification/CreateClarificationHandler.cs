@@ -170,7 +170,7 @@ public class CreateClarificationHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "CreateClarification: no se pudo enviar el email de solicitud de información al usuario {UserId}.", recipient.Id);
+            logger.LogError(ex, "CreateClarification: no se pudo encolar el email de solicitud de información al usuario {UserId}.", recipient.Id);
         }
     }
 
