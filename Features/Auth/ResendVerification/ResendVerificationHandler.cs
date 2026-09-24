@@ -1,12 +1,14 @@
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Infrastructure.Database;
+using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Infrastructure.Notifications;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace evalflow_backend_api.Features.Auth.ResendVerification;
 
-public class ResendVerificationHandler(AppDbContext dbContext, IEmailService emailService) : IRequestHandler<ResendVerificationRecord, IResult>
+public class ResendVerificationHandler(AppDbContext dbContext, IEmailService emailService, IOptions<FrontendSettings> frontendSettings) : IRequestHandler<ResendVerificationRecord, IResult>
 {
     public async Task<IResult> Handle(ResendVerificationRecord request, CancellationToken cancellationToken)
     {
@@ -43,7 +45,7 @@ public class ResendVerificationHandler(AppDbContext dbContext, IEmailService ema
 
         var template = await File.ReadAllTextAsync(templatePath, cancellationToken);
         
-        var verificationLink = $"http://localhost:3000/auth/verify-email?token={user.TokenValidacionEmail}";
+        var verificationLink = frontendSettings.Value.BuildLink($"auth/verify-email?token={user.TokenValidacionEmail}");
 
         var emailBody = template
             .Replace("{{UserNombre}}", user.Nombre)

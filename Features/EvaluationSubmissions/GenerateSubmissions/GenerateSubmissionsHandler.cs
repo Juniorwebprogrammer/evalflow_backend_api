@@ -1,18 +1,21 @@
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Domain.Enums;
 using evalflow_backend_api.Infrastructure.Database;
+using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Infrastructure.Notifications; // Tu servicio de correos
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace evalflow_backend_api.Features.EvaluationSubmissions.GenerateSubmissions;
 
 public class GenerateSubmissionsHandler(
     AppDbContext dbContext, 
     ICurrentUserService currentUser,
-    IEmailService emailService) : IRequestHandler<GenerateSubmissionsRecord, IResult>
+    IEmailService emailService,
+    IOptions<FrontendSettings> frontendSettings) : IRequestHandler<GenerateSubmissionsRecord, IResult>
 {
     public async Task<IResult> Handle(GenerateSubmissionsRecord request, CancellationToken cancellationToken)
     {
@@ -119,11 +122,11 @@ public class GenerateSubmissionsHandler(
         }
     }
 
-    private static async Task<string> GenerateEvaluationAssignedEmailHtmlAsync(string userNombre, string cycleName, int pendingCount)
+    private async Task<string> GenerateEvaluationAssignedEmailHtmlAsync(string userNombre, string cycleName, int pendingCount)
     {
         var templatePath = Path.Combine(Directory.GetCurrentDirectory(), "Infrastructure", "Notifications", "Templates", "EvaluationAssignedEmail.html");
         var template = await File.ReadAllTextAsync(templatePath);
-        var dashboardLink = "http://localhost:3000/dashboard/mis-evaluaciones";
+        var dashboardLink = frontendSettings.Value.BuildLink("dashboard/mis-evaluaciones");
         var currentYear = DateTime.UtcNow.Year.ToString();
         var formWord = pendingCount == 1 ? "formulario" : "formularios";
 

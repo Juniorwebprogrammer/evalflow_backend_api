@@ -1,9 +1,11 @@
+using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Features.Auth.ForgotPassword;
 using evalflow_backend_api.Infrastructure.Notifications;
 using evalflow_backend_api.Tests.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Moq;
+using Microsoft.Extensions.Options;
 
 namespace evalflow_backend_api.Tests.Features.Auth.ForgotPassword;
 
@@ -12,7 +14,7 @@ public class ForgotPasswordHandlerTests
     private readonly Mock<IEmailService> _emailService = new();
 
     private ForgotPasswordHandler CreateSut(evalflow_backend_api.Infrastructure.Database.AppDbContext dbContext) =>
-        new(dbContext, _emailService.Object);
+        new(dbContext, _emailService.Object, Options.Create(new FrontendSettings { BaseUrl = "http://frontend.test" }));
 
     [Fact]
     public async Task Handle_WithUnknownEmail_ReturnsOkAndSendsNoEmail()

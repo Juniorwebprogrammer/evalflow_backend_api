@@ -1,3 +1,4 @@
+using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Features.Team.InviteEmployee;
 using evalflow_backend_api.Infrastructure.Notifications;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Microsoft.Extensions.Options;
 
 namespace evalflow_backend_api.Tests.Features.Team.InviteEmployee;
 
@@ -19,7 +21,7 @@ public class InviteEmployeeHandlerTests
     private readonly Mock<IEmailService> _emailService = new();
 
     private InviteEmployeeHandler CreateSut(evalflow_backend_api.Infrastructure.Database.AppDbContext dbContext) =>
-        new(dbContext, _currentUser.Object, _passwordHasher.Object, _emailService.Object);
+        new(dbContext, _currentUser.Object, _passwordHasher.Object, _emailService.Object, Options.Create(new FrontendSettings { BaseUrl = "http://frontend.test" }));
 
     [Fact]
     public async Task Handle_WithoutTenantClaim_ReturnsUnauthorized()

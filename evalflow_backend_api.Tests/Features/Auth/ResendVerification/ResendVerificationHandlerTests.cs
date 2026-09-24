@@ -1,8 +1,10 @@
+using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Features.Auth.ResendVerification;
 using evalflow_backend_api.Infrastructure.Notifications;
 using evalflow_backend_api.Tests.Common;
 using Microsoft.AspNetCore.Http;
 using Moq;
+using Microsoft.Extensions.Options;
 
 namespace evalflow_backend_api.Tests.Features.Auth.ResendVerification;
 
@@ -11,7 +13,7 @@ public class ResendVerificationHandlerTests
     private readonly Mock<IEmailService> _emailService = new();
 
     private ResendVerificationHandler CreateSut(evalflow_backend_api.Infrastructure.Database.AppDbContext dbContext) =>
-        new(dbContext, _emailService.Object);
+        new(dbContext, _emailService.Object, Options.Create(new FrontendSettings { BaseUrl = "http://frontend.test" }));
 
     [Fact]
     public async Task Handle_WithUnknownEmail_ReturnsOkAndSendsNoEmail()

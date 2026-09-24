@@ -36,6 +36,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("ApiKey", IntegrationTestBase.ValidApiKey);
         builder.UseSetting("Jwt:Secret", "test-only-jwt-secret-at-least-32-bytes-long!!");
         builder.UseSetting("Encryption:Key", "test-only-encryption-key-32bytes");
+        builder.UseSetting("Frontend:BaseUrl", "http://frontend.test");
 
         builder.ConfigureServices(services =>
         {

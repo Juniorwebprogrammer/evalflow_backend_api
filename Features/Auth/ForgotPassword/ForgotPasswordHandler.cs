@@ -1,13 +1,15 @@
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Infrastructure.Database;
+using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Infrastructure.Notifications;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace evalflow_backend_api.Features.Auth.ForgotPassword;
 
-public class ForgotPasswordHandler(AppDbContext dbContext, IEmailService emailService) : IRequestHandler<ForgotPasswordRecord, IResult>
+public class ForgotPasswordHandler(AppDbContext dbContext, IEmailService emailService, IOptions<FrontendSettings> frontendSettings) : IRequestHandler<ForgotPasswordRecord, IResult>
 {
     public async Task<IResult> Handle(ForgotPasswordRecord request, CancellationToken cancellationToken)
     {
@@ -46,7 +48,7 @@ public class ForgotPasswordHandler(AppDbContext dbContext, IEmailService emailSe
 
         var template = await File.ReadAllTextAsync(templatePath, cancellationToken);
         
-        var recoveryLink = $"http://localhost:3000/reset-password?token={user.TokenRecuperacionPassword}";
+        var recoveryLink = frontendSettings.Value.BuildLink($"reset-password?token={user.TokenRecuperacionPassword}");
 
         var emailBody = template
             .Replace("{{UserNombre}}", user.Nombre)

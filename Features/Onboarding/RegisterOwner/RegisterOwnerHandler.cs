@@ -1,16 +1,18 @@
 using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Infrastructure.Database;
+using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Infrastructure.Database.Seeders;
 using evalflow_backend_api.Infrastructure.Jwt;
 using evalflow_backend_api.Infrastructure.Notifications;
 using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace evalflow_backend_api.Features.Onboarding.RegisterOwner;
 
-public class RegisterOwnerHandler(AppDbContext dbContext, IJwtProvider interfaceJwtProvider, IPasswordHasser interfacePasswordHasser, IEmailService emailService) : IRequestHandler<RegisterOwnerRecord, IResult>
+public class RegisterOwnerHandler(AppDbContext dbContext, IJwtProvider interfaceJwtProvider, IPasswordHasser interfacePasswordHasser, IEmailService emailService, IOptions<FrontendSettings> frontendSettings) : IRequestHandler<RegisterOwnerRecord, IResult>
 {
     public async Task<IResult> Handle(RegisterOwnerRecord request, CancellationToken cancellationToken)
     {
@@ -105,7 +107,7 @@ public class RegisterOwnerHandler(AppDbContext dbContext, IJwtProvider interface
     {
         var templatePath = Path.Combine(Directory.GetCurrentDirectory(), "Infrastructure", "Notifications", "Templates", "WelcomeEmail.html");
         var template = await File.ReadAllTextAsync(templatePath);
-        var validationLink = $"http://localhost:3000/auth/verify-email?token={token}";
+        var validationLink = frontendSettings.Value.BuildLink($"auth/verify-email?token={token}");
         var currentYear = DateTime.UtcNow.Year.ToString();
         
         return template

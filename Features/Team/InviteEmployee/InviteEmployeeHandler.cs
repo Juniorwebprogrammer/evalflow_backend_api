@@ -1,6 +1,7 @@
 using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Infrastructure.Database;
+using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Infrastructure.Notifications;
 using evalflow_backend_api.Infrastructure.Security;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
@@ -8,10 +9,11 @@ using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace evalflow_backend_api.Features.Team.InviteEmployee;
 
-public class InviteEmployeeHandler(AppDbContext dbContext, ICurrentUserService currentUser, IPasswordHasser interfacePasswordHasser, IEmailService emailService) 
+public class InviteEmployeeHandler(AppDbContext dbContext, ICurrentUserService currentUser, IPasswordHasser interfacePasswordHasser, IEmailService emailService, IOptions<FrontendSettings> frontendSettings) 
     : IRequestHandler<InviteEmployeeRecord, IResult>
 {
     public async Task<IResult> Handle(InviteEmployeeRecord request, CancellationToken cancellationToken)
@@ -83,7 +85,7 @@ public class InviteEmployeeHandler(AppDbContext dbContext, ICurrentUserService c
     {
         var templatePath = Path.Combine(Directory.GetCurrentDirectory(), "Infrastructure", "Notifications", "Templates", "InviteEmail.html");
         
-        var inviteLink = $"http://localhost:3000/accept-invite?token={user.TokenInvitacion}";
+        var inviteLink = frontendSettings.Value.BuildLink($"accept-invite?token={user.TokenInvitacion}");
 
         var emailBody = string.Empty;
         

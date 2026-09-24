@@ -1,3 +1,4 @@
+using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Features.Onboarding.RegisterOwner;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Microsoft.Extensions.Options;
 
 namespace evalflow_backend_api.Tests.Features.Onboarding.RegisterOwner;
 
@@ -19,7 +21,7 @@ public class RegisterOwnerHandlerTests
     private readonly Mock<IEmailService> _emailService = new();
 
     private RegisterOwnerHandler CreateSut(evalflow_backend_api.Infrastructure.Database.AppDbContext dbContext) =>
-        new(dbContext, _jwtProvider.Object, _passwordHasher.Object, _emailService.Object);
+        new(dbContext, _jwtProvider.Object, _passwordHasher.Object, _emailService.Object, Options.Create(new FrontendSettings { BaseUrl = "http://frontend.test" }));
 
     private static RegisterOwnerRecord ValidRequest(string email = "owner@example.com") => new(
         UserNombre: "Ada",

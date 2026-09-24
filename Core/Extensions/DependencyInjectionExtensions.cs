@@ -1,5 +1,6 @@
 using System.Text;
 using evalflow_backend_api.Infrastructure.BackgroundJobs;
+using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Infrastructure.Jwt;
 using evalflow_backend_api.Infrastructure.Notifications;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
@@ -79,6 +80,11 @@ public static class DependencyInjectionExtensions
             client.BaseAddress = new Uri("https://api.brevo.com/v3/");
             client.Timeout = TimeSpan.FromSeconds(15);
         });
+
+        services.AddOptions<FrontendSettings>()
+            .Bind(configuration.GetSection(FrontendSettings.SectionName))
+            .Validate(s => Uri.TryCreate(s.BaseUrl, UriKind.Absolute, out _), "Falta o no es válida la URL del frontend en la configuración (Frontend:BaseUrl).")
+            .ValidateOnStart();
 
         services.AddHttpContextAccessor();
         services.AddHostedService<EvaluationReminderJob>();
