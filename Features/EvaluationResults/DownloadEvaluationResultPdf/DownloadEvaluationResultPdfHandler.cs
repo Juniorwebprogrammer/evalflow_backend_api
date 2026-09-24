@@ -120,15 +120,6 @@ public class DownloadEvaluationResultPdfHandler(
         {
             column.Spacing(14);
             column.Item().Element(c => ComposeDetails(c, snapshot));
-            column.Item().Element(c => ComposeSummary(c, snapshot));
-
-            if (snapshot.AutoCompleted)
-            {
-                column.Item().Background(Colors.Amber.Lighten5).Padding(8)
-                    .Text("Alguno de los formularios de esta evaluación no se envió a tiempo y se completó automáticamente con las respuestas que tenía guardadas.")
-                    .FontSize(8.5f).FontColor(Colors.Amber.Darken4);
-            }
-
             column.Item().Element(c => ComposeQuestions(c, snapshot));
         });
     }
@@ -165,48 +156,23 @@ public class DownloadEvaluationResultPdfHandler(
         });
     }
 
-    private static void ComposeSummary(IContainer container, EvaluationResultSnapshot snapshot)
-    {
-        container.Row(row =>
-        {
-            row.Spacing(10);
-            SummaryTile(row.RelativeItem(), "Puntuación final", FormatScore(snapshot.AverageFinal), BrandColor);
-            SummaryTile(row.RelativeItem(), "Autoevaluación", FormatScore(snapshot.AverageSelf), Colors.Grey.Darken3);
-            SummaryTile(row.RelativeItem(), "Superior", FormatScore(snapshot.AverageManager), Colors.Grey.Darken3);
-            SummaryTile(row.RelativeItem(), "Equilibrio",
-                snapshot.AlignmentPercentage is null ? "—" : $"{FormatScore(snapshot.AlignmentPercentage)} %", Colors.Green.Darken2);
-        });
-    }
-
-    private static void SummaryTile(IContainer container, string label, string value, string color)
-    {
-        container.Border(1).BorderColor(Colors.Grey.Lighten2).Padding(8).Column(column =>
-        {
-            column.Item().Text(label.ToUpperInvariant()).FontSize(7.5f).SemiBold().FontColor(Colors.Grey.Medium);
-            column.Item().PaddingTop(2).Text(value).FontSize(15).Bold().FontColor(color);
-        });
-    }
-
     private static void ComposeQuestions(IContainer container, EvaluationResultSnapshot snapshot)
     {
         container.Column(column =>
         {
-            column.Item().PaddingBottom(6).Text("Respuestas por pregunta").FontSize(11).SemiBold();
+            column.Item().PaddingBottom(6).Text("Resultados por pregunta").FontSize(11).SemiBold();
 
             column.Item().Table(table =>
             {
                 table.ColumnsDefinition(columns =>
                 {
-                    columns.RelativeColumn(4);
+                    columns.RelativeColumn(5);
                     columns.RelativeColumn(2);
-                    columns.RelativeColumn(2);
-                    columns.RelativeColumn(2.4f);
-                    columns.RelativeColumn(1.6f);
                 });
 
                 table.Header(header =>
                 {
-                    foreach (var title in new[] { "Pregunta", "Autoevaluación", "Superior", "Respuesta final", "Nivel" })
+                    foreach (var title in new[] { "Pregunta", "Resultado" })
                     {
                         header.Cell().Background(BrandColor).PaddingVertical(5).PaddingHorizontal(6)
                             .Text(title).FontSize(8.5f).SemiBold().FontColor(Colors.White);
@@ -220,14 +186,7 @@ public class DownloadEvaluationResultPdfHandler(
                         cell.Item().Text(question.Texto).SemiBold();
                         cell.Item().Text(question.Topic).FontSize(7.5f).FontColor(Colors.Grey.Medium);
                     });
-                    QuestionCell(table).Text(question.SelfAnswer ?? "—");
-                    QuestionCell(table).Text(question.ManagerAnswer ?? "—");
-                    QuestionCell(table).Column(cell =>
-                    {
-                        cell.Item().Text(question.FinalAnswer ?? "—").Bold().FontColor(BrandColor);
-                        cell.Item().Text(FinalSourceLabel(question)).FontSize(7.5f).FontColor(Colors.Grey.Medium);
-                    });
-                    QuestionCell(table).Text(LevelLabel(question.Level)).FontSize(8.5f).FontColor(LevelColor(question.Level));
+                    QuestionCell(table).Text(question.FinalAnswer ?? "—").Bold().FontColor(BrandColor);
                 }
             });
         });
@@ -252,30 +211,6 @@ public class DownloadEvaluationResultPdfHandler(
         });
     }
 
-    private static string FinalSourceLabel(ResultQuestionSnapshot question)
-    {
-        if (question.FinalSource is null) return "Sin respuesta";
-
-        var source = question.FinalSource == AcceptedAnswerSource.Superior ? "del superior" : "de la autoevaluación";
-        return question.Accepted ? $"Aceptada {source}" : $"Respuesta {source}";
-    }
-
-    private static string LevelLabel(AlignmentLevel level) => level switch
-    {
-        AlignmentLevel.Alineado => "Alineado",
-        AlignmentLevel.Leve => "Diferencia leve",
-        AlignmentLevel.Desequilibrio => "Desequilibrio",
-        _ => "—"
-    };
-
-    private static string LevelColor(AlignmentLevel level) => level switch
-    {
-        AlignmentLevel.Alineado => Colors.Green.Darken2,
-        AlignmentLevel.Leve => Colors.Amber.Darken3,
-        AlignmentLevel.Desequilibrio => Colors.Red.Darken2,
-        _ => Colors.Grey.Medium
-    };
-
     private static string EvaluationTypeLabel(EvaluationType type) => type switch
     {
         EvaluationType.Auto => "Autoevaluación",
@@ -285,8 +220,6 @@ public class DownloadEvaluationResultPdfHandler(
     };
 
     private static string FormatDate(DateTime date) => date.ToString("dd/MM/yyyy", Spanish);
-
-    private static string FormatScore(double? value) => value?.ToString("0.##", Spanish) ?? "—";
 
     private static string BuildFileName(EvaluationResultSnapshot snapshot)
     {
