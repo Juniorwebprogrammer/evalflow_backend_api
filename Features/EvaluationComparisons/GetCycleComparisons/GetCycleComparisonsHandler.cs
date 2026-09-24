@@ -41,6 +41,9 @@ public class GetCycleComparisonsHandler(
 
         var comparisons = BuildComparisons(submissions);
 
+        logger.LogInformation("GetCycleComparisons result: {Result}",
+            JsonSerializer.Serialize(new CycleComparisonsDto(cycle.Id, cycle.Nombre, comparisons)));
+
         return Results.Ok(new CycleComparisonsDto(cycle.Id, cycle.Nombre, comparisons));
     }
 
