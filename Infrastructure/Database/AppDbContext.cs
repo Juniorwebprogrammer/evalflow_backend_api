@@ -19,6 +19,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Answer> Answers => Set<Answer>();
     public DbSet<ClarificationRequest> ClarificationRequests => Set<ClarificationRequest>();
     public DbSet<EmailOutboxMessage> EmailOutboxMessages => Set<EmailOutboxMessage>();
+    public DbSet<DiscrepancyAcceptance> DiscrepancyAcceptances => Set<DiscrepancyAcceptance>();
+    public DbSet<EvaluationResult> EvaluationResults => Set<EvaluationResult>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -144,6 +146,62 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<EmailOutboxMessage>(entity =>
         {
             entity.HasIndex(m => new { m.Status, m.NextAttemptAt });
+        });
+
+        modelBuilder.Entity<DiscrepancyAcceptance>(entity =>
+        {
+            entity.HasOne(a => a.Cycle)
+                .WithMany()
+                .HasForeignKey(a => a.EvaluationCycleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.Template)
+                .WithMany()
+                .HasForeignKey(a => a.TemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.Question)
+                .WithMany()
+                .HasForeignKey(a => a.QuestionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.EvaluatedUser)
+                .WithMany()
+                .HasForeignKey(a => a.EvaluatedUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(a => a.AcceptedByUser)
+                .WithMany()
+                .HasForeignKey(a => a.AcceptedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(a => new { a.EvaluationCycleId, a.TemplateId, a.EvaluatedUserId, a.QuestionId }).IsUnique();
+        });
+
+        modelBuilder.Entity<EvaluationResult>(entity =>
+        {
+            entity.HasOne(r => r.Cycle)
+                .WithMany()
+                .HasForeignKey(r => r.EvaluationCycleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(r => r.Template)
+                .WithMany()
+                .HasForeignKey(r => r.TemplateId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(r => r.EvaluatedUser)
+                .WithMany()
+                .HasForeignKey(r => r.EvaluatedUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(r => r.CompletedByUser)
+                .WithMany()
+                .HasForeignKey(r => r.CompletedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(r => new { r.EvaluationCycleId, r.TemplateId, r.EvaluatedUserId }).IsUnique();
+            entity.HasIndex(r => r.EvaluatedUserId);
         });
     }
 }

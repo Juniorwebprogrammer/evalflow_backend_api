@@ -24,6 +24,8 @@ public class EvaluationCycle
     public Company? Empresa { get; set; }
 
     public EvaluationType TipoEvaluación { get; set; } = EvaluationType.Auto;
+
+    public DateTime? FechaCompletado { get; set; }
     
     public ICollection<Template> Templates { get; set; } = new List<Template>();
 }

@@ -8,6 +8,7 @@ using evalflow_backend_api.Infrastructure.Security.Encryption;
 using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using QuestPDF.Infrastructure;
 
 namespace evalflow_backend_api.Core.Extensions;
 
@@ -82,6 +83,8 @@ public static class DependencyInjectionExtensions
             client.BaseAddress = new Uri("https://api.brevo.com/v3/");
             client.Timeout = TimeSpan.FromSeconds(15);
         });
+
+        QuestPDF.Settings.License = LicenseType.Community;
 
         services.AddOptions<FrontendSettings>()
             .Bind(configuration.GetSection(FrontendSettings.SectionName))

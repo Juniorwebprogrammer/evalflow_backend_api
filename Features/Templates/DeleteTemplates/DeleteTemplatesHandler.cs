@@ -21,6 +21,10 @@ public class DeleteTemplateHandler(AppDbContext dbContext, ICurrentUserService c
         var template = await GetTemplateAsync(request.Id, company.Id, cancellationToken);
         if (template is null) return Results.NotFound(new { Message = "Plantilla no encontrada." });
 
+        var hasResults = await dbContext.EvaluationResults.AnyAsync(r => r.TemplateId == template.Id, cancellationToken);
+        if (hasResults)
+            return Results.BadRequest(new { Message = "No puedes eliminar una plantilla con resultados de evaluación guardados." });
+
         // 🚀 TODO: VALIDACIÓN FUTURA (SISTEMA DE CICLOS)
         // Antes de eliminar, debemos verificar que esta plantilla no esté siendo usada en un ciclo activo.
         // 

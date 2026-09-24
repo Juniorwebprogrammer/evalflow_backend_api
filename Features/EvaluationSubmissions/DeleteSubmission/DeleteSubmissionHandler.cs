@@ -17,6 +17,9 @@ public class DeleteSubmissionHandler(AppDbContext dbContext, ICurrentUserService
         var submission = await GetSubmissionSecurelyAsync(request.SubmissionId, tenantId, cancellationToken);
         if (submission is null) return Results.NotFound(new { Message = "Formulario no encontrado." });
 
+        if (submission.Cycle!.FechaCompletado.HasValue)
+            return Results.Conflict(new { Message = "El ciclo ya se ha completado y no admite cambios." });
+
         await DeleteAndSaveAsync(submission, cancellationToken);
 
         return Results.Ok(new { Message = "Formulario eliminado correctamente." });

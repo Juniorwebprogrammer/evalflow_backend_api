@@ -10,5 +10,6 @@ public record EvaluationCycleSummaryDto(
     DateTime FechaFin,
     int TemplatesCount,
     List<int> TemplateIds,
-    EvaluationType TipoEvaluacion
+    EvaluationType TipoEvaluacion,
+    DateTime? FechaCompletado
 );

@@ -44,7 +44,8 @@ public class GetAllEvaluationCyclesHandler(AppDbContext dbContext, ICurrentUserS
                 c.FechaFin,
                 c.Templates.Count(),
                 c.Templates.Select(t => t.Id).ToList(),
-                c.TipoEvaluación
+                c.TipoEvaluación,
+                c.FechaCompletado
             ))
             .ToListAsync(cancellationToken);
     }

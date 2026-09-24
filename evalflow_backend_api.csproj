@@ -36,6 +36,10 @@
         <None Update="Infrastructure\Notifications\Templates\ClarificationRequestedEmail.html">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
+        <None Update="Infrastructure\Notifications\Templates\EvaluationResultsReadyEmail.html">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <PackageReference Include="QuestPDF" Version="2026.9.0" />
     </ItemGroup>
 
     <ItemGroup>

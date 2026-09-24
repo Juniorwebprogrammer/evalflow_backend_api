@@ -38,10 +38,32 @@ public class GetCycleComparisonsHandler(
         }
 
         var submissions = await FetchSubmissionsAsync(cycle.Id, request.EvaluatedUserId, cancellationToken);
+        var acceptances = await FetchAcceptancesAsync(cycle.Id, request.EvaluatedUserId, cancellationToken);
 
-        var comparisons = BuildComparisons(submissions);
+        var comparisons = BuildComparisons(submissions, acceptances);
 
-        return Results.Ok(new CycleComparisonsDto(cycle.Id, cycle.Nombre, comparisons));
+        return Results.Ok(new CycleComparisonsDto(
+            cycle.Id,
+            cycle.Nombre,
+            cycle.FechaCompletado.HasValue,
+            cycle.FechaCompletado,
+            comparisons.Sum(c => c.PendingImbalances),
+            comparisons));
+    }
+
+    private async Task<Dictionary<(int TemplateId, int EvaluatedUserId, int QuestionId), AcceptedAnswerSource>> FetchAcceptancesAsync(
+        int cycleId, int? evaluatedUserId, CancellationToken cancellationToken)
+    {
+        var query = dbContext.DiscrepancyAcceptances
+            .AsNoTracking()
+            .Where(a => a.EvaluationCycleId == cycleId);
+
+        if (evaluatedUserId.HasValue)
+            query = query.Where(a => a.EvaluatedUserId == evaluatedUserId.Value);
+
+        var acceptances = await query.ToListAsync(cancellationToken);
+
+        return acceptances.ToDictionary(a => (a.TemplateId, a.EvaluatedUserId, a.QuestionId), a => a.AcceptedSource);
     }
 
     private async Task<EvaluationCycle?> GetCycleAsync(int cycleId, string tenantId, CancellationToken cancellationToken)
@@ -70,17 +92,19 @@ public class GetCycleComparisonsHandler(
             .ToListAsync(cancellationToken);
     }
 
-    private List<EmployeeComparisonDto> BuildComparisons(List<EvaluationSubmission> submissions)
+    private List<EmployeeComparisonDto> BuildComparisons(List<EvaluationSubmission> submissions,
+        Dictionary<(int TemplateId, int EvaluatedUserId, int QuestionId), AcceptedAnswerSource> acceptances)
     {
         return submissions
             .GroupBy(s => new { s.EvaluatedUserId, s.TemplateId })
-            .Select(group => BuildEmployeeComparison(group.ToList()))
+            .Select(group => BuildEmployeeComparison(group.ToList(), acceptances))
             .OrderBy(c => c.EvaluatedUserName)
             .ThenBy(c => c.TemplateTitle)
             .ToList();
     }
 
-    private EmployeeComparisonDto BuildEmployeeComparison(List<EvaluationSubmission> submissions)
+    private EmployeeComparisonDto BuildEmployeeComparison(List<EvaluationSubmission> submissions,
+        Dictionary<(int TemplateId, int EvaluatedUserId, int QuestionId), AcceptedAnswerSource> acceptances)
     {
         var reference = submissions[0];
         var self = FindSelfSubmission(submissions);
@@ -90,7 +114,9 @@ public class GetCycleComparisonsHandler(
         var managerCompleted = manager?.IsCompleted == true;
         var isComparable = selfCompleted && managerCompleted;
 
-        var questions = isComparable ? CompareAnswers(reference.Template!, self!, manager!) : [];
+        var questions = isComparable
+            ? ApplyAcceptances(CompareAnswers(reference.Template!, self!, manager!), reference.TemplateId, reference.EvaluatedUserId, acceptances)
+            : [];
 
         return new EmployeeComparisonDto(
             reference.EvaluatedUserId,
@@ -105,8 +131,19 @@ public class GetCycleComparisonsHandler(
             isComparable,
             isComparable ? BuildSummary(questions) : null,
             isComparable ? BuildTopics(questions) : [],
-            questions
+            questions,
+            questions.Count(q => q.Level == AlignmentLevel.Desequilibrio && q.AcceptedSource is null)
         );
+    }
+
+    private static List<QuestionComparisonDto> ApplyAcceptances(List<QuestionComparisonDto> questions, int templateId, int evaluatedUserId,
+        Dictionary<(int TemplateId, int EvaluatedUserId, int QuestionId), AcceptedAnswerSource> acceptances)
+    {
+        return questions
+            .Select(q => acceptances.TryGetValue((templateId, evaluatedUserId, q.QuestionId), out var source)
+                ? q with { AcceptedSource = source }
+                : q)
+            .ToList();
     }
 
     private static EvaluationSubmission? FindSelfSubmission(List<EvaluationSubmission> submissions)
@@ -201,7 +238,8 @@ public class GetCycleComparisonsHandler(
             managerOptions,
             gap,
             level,
-            direction
+            direction,
+            null
         );
     }
 

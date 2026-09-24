@@ -25,6 +25,8 @@ public class GenerateSubmissionsHandler(
         var cycle = await GetCycleWithDetailsAsync(request.CycleId, tenantId, cancellationToken);
         if (cycle is null) return Results.NotFound(new { Message = "Ciclo no encontrado." });
 
+        if (cycle.FechaCompletado.HasValue) return Results.Conflict(new { Message = "El ciclo ya se ha completado y no admite cambios." });
+
         var newSubmissions = await GenerateMissingSubmissionsAsync(cycle, cancellationToken);
         
         if (newSubmissions.Count > 0)

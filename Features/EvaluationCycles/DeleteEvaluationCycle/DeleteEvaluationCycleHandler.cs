@@ -20,6 +20,9 @@ public class DeleteEvaluationCycleHandler(AppDbContext dbContext, ICurrentUserSe
         var cycle = await GetCycleAsync(request.Id, company.Id, cancellationToken);
         if (cycle is null) return Results.NotFound(new { Message = "Ciclo no encontrado." });
 
+        if (cycle.FechaCompletado.HasValue)
+            return Results.BadRequest(new { Message = "No se puede eliminar un ciclo completado: contiene los resultados de las evaluaciones." });
+
         if (cycle.Activo) return Results.BadRequest(new { Message = "No se puede eliminar un ciclo activo. Desactívalo primero." });
 
         await DeleteAndSaveCycleAsync(cycle, cancellationToken);

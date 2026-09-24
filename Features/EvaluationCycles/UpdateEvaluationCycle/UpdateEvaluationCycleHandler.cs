@@ -23,6 +23,8 @@ public class UpdateEvaluationCycleHandler(AppDbContext dbContext, ICurrentUserSe
         var cycle = await GetCycleAsync(request.Id, company.Id, cancellationToken);
         if (cycle is null) return Results.NotFound(new { Message = "Ciclo no encontrado." });
 
+        if (cycle.FechaCompletado.HasValue) return Results.Conflict(new { Message = "El ciclo ya se ha completado y no admite cambios." });
+
         await UpdateAndSaveCycleAsync(cycle, request, cancellationToken);
 
         return Results.Ok(new { Message = "Ciclo actualizado correctamente." });

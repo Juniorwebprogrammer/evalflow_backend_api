@@ -30,6 +30,9 @@ public class SaveSubmissionAnswersHandler(
 
         if (submission.IsCompleted) return Results.BadRequest(new { Message = "Este formulario ya ha sido enviado." });
 
+        if (submission.Cycle!.FechaCompletado.HasValue)
+            return Results.BadRequest(new { Message = "El ciclo de evaluación ya se ha completado." });
+
         if (submission.Cycle!.FechaFin < DateTime.UtcNow)
         {
             return Results.BadRequest(new { Message = "El plazo para completar esta evaluación ha finalizado." });

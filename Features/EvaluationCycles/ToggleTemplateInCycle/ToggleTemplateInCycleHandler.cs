@@ -17,6 +17,8 @@ public class ToggleTemplateInCycleHandler(AppDbContext dbContext, ICurrentUserSe
         var cycle = await GetCycleWithTemplatesAsync(request.CycleId, tenantId, cancellationToken);
         if (cycle is null) return Results.NotFound(new { Message = "Ciclo no encontrado o no pertenece a tu empresa." });
 
+        if (cycle.FechaCompletado.HasValue) return Results.Conflict(new { Message = "El ciclo ya se ha completado y no admite cambios." });
+
         var template = await GetTemplateAsync(request.TemplateId, tenantId, cancellationToken);
         if (template is null) return Results.BadRequest(new { Message = "La plantilla no existe o no pertenece a tu empresa." });
 

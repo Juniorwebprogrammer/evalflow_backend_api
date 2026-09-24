@@ -1,0 +1,10 @@
+using System.Text.Json.Serialization;
+
+namespace evalflow_backend_api.Domain.Enums;
+
+[JsonConverter(typeof(JsonStringEnumConverter<AcceptedAnswerSource>))]
+public enum AcceptedAnswerSource
+{
+    Superior,
+    Autoevaluacion
+}

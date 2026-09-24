@@ -14,7 +14,8 @@ public record QuestionComparisonDto(
     List<string>? ManagerOptions,
     int? Gap,
     AlignmentLevel Level,
-    GapDirection Direction
+    GapDirection Direction,
+    AcceptedAnswerSource? AcceptedSource
 );
 
 public record TopicComparisonDto(
@@ -53,11 +54,15 @@ public record EmployeeComparisonDto(
     bool IsComparable,
     ComparisonSummaryDto? Summary,
     List<TopicComparisonDto> Topics,
-    List<QuestionComparisonDto> Questions
+    List<QuestionComparisonDto> Questions,
+    int PendingImbalances
 );
 
 public record CycleComparisonsDto(
     int CycleId,
     string CycleName,
+    bool IsCompleted,
+    DateTime? CompletedAt,
+    int PendingImbalances,
     List<EmployeeComparisonDto> Comparisons
 );
