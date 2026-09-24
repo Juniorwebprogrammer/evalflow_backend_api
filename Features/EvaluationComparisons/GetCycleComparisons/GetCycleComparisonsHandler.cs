@@ -95,6 +95,7 @@ public class GetCycleComparisonsHandler(
         return new EmployeeComparisonDto(
             reference.EvaluatedUserId,
             $"{reference.EvaluatedUser!.Nombre} {reference.EvaluatedUser.Apellidos}",
+            reference.EvaluatedUser.Rol,
             reference.TemplateId,
             reference.Template!.Titulo,
             manager?.RespondentUserId,

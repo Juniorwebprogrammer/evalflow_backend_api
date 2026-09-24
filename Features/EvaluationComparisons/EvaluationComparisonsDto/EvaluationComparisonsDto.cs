@@ -43,6 +43,7 @@ public record ComparisonSummaryDto(
 public record EmployeeComparisonDto(
     int EvaluatedUserId,
     string EvaluatedUserName,
+    string EvaluatedRol,
     int TemplateId,
     string TemplateTitle,
     int? ManagerUserId,
