@@ -17,7 +17,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Question> Questions => Set<Question>();
     public DbSet<EvaluationSubmission> EvaluationSubmissions => Set<EvaluationSubmission>();
     public DbSet<Answer> Answers => Set<Answer>();
-    
+    public DbSet<ClarificationRequest> ClarificationRequests => Set<ClarificationRequest>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -102,6 +103,41 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany(s => s.Answers)
                 .HasForeignKey(a => a.EvaluationSubmissionId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ClarificationRequest>(entity =>
+        {
+            entity.HasOne(c => c.Cycle)
+                .WithMany()
+                .HasForeignKey(c => c.EvaluationCycleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(c => c.Template)
+                .WithMany()
+                .HasForeignKey(c => c.TemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(c => c.Question)
+                .WithMany()
+                .HasForeignKey(c => c.QuestionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(c => c.EvaluatedUser)
+                .WithMany()
+                .HasForeignKey(c => c.EvaluatedUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(c => c.ManagerUser)
+                .WithMany()
+                .HasForeignKey(c => c.ManagerUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(c => c.RequestedByUser)
+                .WithMany()
+                .HasForeignKey(c => c.RequestedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(c => new { c.EvaluationCycleId, c.EvaluatedUserId });
         });
     }
 }

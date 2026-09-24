@@ -33,6 +33,9 @@
         <None Update="Infrastructure\Notifications\Templates\EvaluationAssignedEmail.html">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
+        <None Update="Infrastructure\Notifications\Templates\ClarificationRequestedEmail.html">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
 
     <ItemGroup>

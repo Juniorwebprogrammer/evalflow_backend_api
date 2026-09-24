@@ -7,6 +7,10 @@ using evalflow_backend_api.Features.Auth.ResendVerification;
 using evalflow_backend_api.Features.Auth.ResetPassword;
 using evalflow_backend_api.Features.Auth.Verify2FA;
 using evalflow_backend_api.Features.Auth.VerifyEmail;
+using evalflow_backend_api.Features.Clarifications.CreateClarification;
+using evalflow_backend_api.Features.Clarifications.GetCycleClarifications;
+using evalflow_backend_api.Features.Clarifications.GetMyClarifications;
+using evalflow_backend_api.Features.Clarifications.RespondClarification;
 using evalflow_backend_api.Features.Companies.DeleteCompanies;
 using evalflow_backend_api.Features.Companies.GetByIdentificationId;
 using evalflow_backend_api.Features.Companies.GetByName;
@@ -156,6 +160,12 @@ public static class EndpointExtensions
         app.MapDeleteSubmission();
         app.MapGetCycleSubmissions();
         app.MapGetCycleComparisons();
+
+        // Clarifications
+        app.MapCreateClarification();
+        app.MapGetCycleClarifications();
+        app.MapGetMyClarifications();
+        app.MapRespondClarification();
 
         // Dashboard
         app.MapGetDashboardStats();
