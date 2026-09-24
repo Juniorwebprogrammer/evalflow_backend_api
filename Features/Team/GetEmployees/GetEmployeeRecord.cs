@@ -12,5 +12,10 @@ public record GetEmployeeResponse(
     string Rol,
     string Cargo,
     bool Activo,
-    DateTime FechaCreacion
+    DateTime FechaCreacion,
+    EmployeeDepartmentResponse? Departamento,
+    EmployeeSuperiorResponse? Superior
 );
+
+public record EmployeeDepartmentResponse(int Id, string Nombre);
+public record EmployeeSuperiorResponse(int Id, string Nombre, string Apellidos);

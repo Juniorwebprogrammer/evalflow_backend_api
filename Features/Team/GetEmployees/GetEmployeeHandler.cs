@@ -32,7 +32,13 @@ public class GetEmployeeHandler(AppDbContext dbContext, ICurrentUserService curr
                 user.Rol,
                 user.Cargo!.Nombre,
                 user.Activo,
-                user.FechaCreacion
+                user.FechaCreacion,
+                user.Departamento == null
+                    ? null
+                    : new EmployeeDepartmentResponse(user.Departamento.Id, user.Departamento.Nombre),
+                user.Superior == null
+                    ? null
+                    : new EmployeeSuperiorResponse(user.Superior.Id, user.Superior.Nombre, user.Superior.Apellidos)
             ))
             .ToListAsync(cancellationToken);
     }
