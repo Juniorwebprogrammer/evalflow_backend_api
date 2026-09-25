@@ -135,17 +135,73 @@ public class GetCycleComparisonsHandlerTests
         result.Should().HaveStatusCode(StatusCodes.Status404NotFound);
     }
 
-    [Theory]
-    [InlineData(EvaluationType.Auto)]
-    [InlineData(EvaluationType.Evaluacion180)]
-    public async Task Handle_WithNon360Cycle_ReturnsBadRequest(EvaluationType tipo)
+    [Fact]
+    public async Task Handle_With180Cycle_ReturnsManagerAnswersForReview()
     {
         await using var db = InMemoryDbContextFactory.Create();
-        var s = await SeedAsync(db, tipo);
+        var s = await SeedAsync(db, EvaluationType.Evaluacion180);
+        var q1 = await AddQuestionAsync(db, s, QuestionType.Estrellas, 1, "Liderazgo");
+        var q2 = await AddQuestionAsync(db, s, QuestionType.Seleccion, 2);
+        var q3 = await AddQuestionAsync(db, s, QuestionType.Escala1a5, 3, "Liderazgo");
+        db.EvaluationSubmissions.Add(
+            Submission(s, s.Employee, s.Manager, completed: true, new() { [q1.Id] = "4", [q2.Id] = "[\"B\"]", [q3.Id] = "3" }));
+        await db.SaveChangesAsync();
 
         var result = await CreateSut(db).Handle(new GetCycleComparisonsRecord(s.Cycle.Id, null), CancellationToken.None);
 
-        result.Should().HaveStatusCode(StatusCodes.Status400BadRequest);
+        var payload = Payload(result);
+        payload.TipoEvaluacion.Should().Be(EvaluationType.Evaluacion180);
+        payload.PendingImbalances.Should().Be(0);
+
+        var review = payload.Comparisons.Should().ContainSingle().Subject;
+        review.ManagerCompleted.Should().BeTrue();
+        review.IsComparable.Should().BeFalse();
+        review.Questions.Select(q => q.ManagerValue).Should().Equal(4, null, 3);
+        review.Questions[1].ManagerOptions.Should().Equal("B");
+        review.Questions.Should().OnlyContain(q => q.SelfValue == null && q.SelfOptions == null && q.Gap == null
+                                                   && q.Level == AlignmentLevel.NoComparable);
+        review.Summary!.AverageManager.Should().Be(3.5);
+        review.Summary.AverageSelf.Should().BeNull();
+        review.Summary.AlignmentPercentage.Should().BeNull();
+        review.Topics.Should().ContainSingle(t => t.Topic == "Liderazgo" && t.AverageManager == 3.5);
+    }
+
+    [Fact]
+    public async Task Handle_WithAutoCycle_ReturnsSelfAnswersForReview()
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+        var s = await SeedAsync(db, EvaluationType.Auto);
+        var question = await AddQuestionAsync(db, s, QuestionType.Estrellas, 1);
+        db.EvaluationSubmissions.Add(Submission(s, s.Employee, s.Employee, completed: true, new() { [question.Id] = "5" }));
+        await db.SaveChangesAsync();
+
+        var result = await CreateSut(db).Handle(new GetCycleComparisonsRecord(s.Cycle.Id, null), CancellationToken.None);
+
+        var review = Payload(result).Comparisons.Should().ContainSingle().Subject;
+        review.SelfCompleted.Should().BeTrue();
+        review.ManagerUserId.Should().BeNull();
+        review.Questions.Should().ContainSingle().Which.SelfValue.Should().Be(5);
+        review.Summary!.AverageSelf.Should().Be(5);
+    }
+
+    [Theory]
+    [InlineData(EvaluationType.Auto)]
+    [InlineData(EvaluationType.Evaluacion180)]
+    public async Task Handle_WithSingleSourceEvaluationPending_ReturnsEntryWithoutAnswers(EvaluationType tipo)
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+        var s = await SeedAsync(db, tipo);
+        var question = await AddQuestionAsync(db, s, QuestionType.Estrellas, 1);
+        var respondent = tipo == EvaluationType.Auto ? s.Employee : s.Manager;
+        db.EvaluationSubmissions.Add(Submission(s, s.Employee, respondent, completed: false, new() { [question.Id] = "3" }));
+        await db.SaveChangesAsync();
+
+        var result = await CreateSut(db).Handle(new GetCycleComparisonsRecord(s.Cycle.Id, null), CancellationToken.None);
+
+        var review = Payload(result).Comparisons.Should().ContainSingle().Subject;
+        review.Questions.Should().BeEmpty();
+        review.Summary.Should().BeNull();
+        _encryptionService.Verify(e => e.Decrypt(It.IsAny<string>()), Times.Never);
     }
 
     [Theory]

@@ -29,22 +29,15 @@ public class GetCycleComparisonsHandler(
         var cycle = await GetCycleAsync(request.CycleId, tenantId, cancellationToken);
         if (cycle is null) return Results.NotFound(new { Message = "Ciclo no encontrado." });
 
-        if (cycle.TipoEvaluación != EvaluationType.Evaluacion360)
-        {
-            return Results.BadRequest(new
-            {
-                Message = "La comparación solo está disponible en ciclos 360 (autoevaluación + evaluación del superior)."
-            });
-        }
-
         var submissions = await FetchSubmissionsAsync(cycle.Id, request.EvaluatedUserId, cancellationToken);
         var acceptances = await FetchAcceptancesAsync(cycle.Id, request.EvaluatedUserId, cancellationToken);
 
-        var comparisons = BuildComparisons(submissions, acceptances);
+        var comparisons = BuildComparisons(cycle.TipoEvaluación, submissions, acceptances);
 
         return Results.Ok(new CycleComparisonsDto(
             cycle.Id,
             cycle.Nombre,
+            cycle.TipoEvaluación,
             cycle.FechaCompletado.HasValue,
             cycle.FechaCompletado,
             comparisons.Sum(c => c.PendingImbalances),
@@ -92,12 +85,14 @@ public class GetCycleComparisonsHandler(
             .ToListAsync(cancellationToken);
     }
 
-    private List<EmployeeComparisonDto> BuildComparisons(List<EvaluationSubmission> submissions,
+    private List<EmployeeComparisonDto> BuildComparisons(EvaluationType tipo, List<EvaluationSubmission> submissions,
         Dictionary<(int TemplateId, int EvaluatedUserId, int QuestionId), AcceptedAnswerSource> acceptances)
     {
         return submissions
             .GroupBy(s => new { s.EvaluatedUserId, s.TemplateId })
-            .Select(group => BuildEmployeeComparison(group.ToList(), acceptances))
+            .Select(group => tipo == EvaluationType.Evaluacion360
+                ? BuildEmployeeComparison(group.ToList(), acceptances)
+                : BuildSingleSourceReview(tipo, group.ToList()))
             .OrderBy(c => c.EvaluatedUserName)
             .ThenBy(c => c.TemplateTitle)
             .ToList();
@@ -134,6 +129,94 @@ public class GetCycleComparisonsHandler(
             questions,
             questions.Count(q => q.Level == AlignmentLevel.Desequilibrio && q.AcceptedSource is null)
         );
+    }
+
+    /// <summary>
+    /// Auto and 180 cycles have a single evaluation per employee (self or manager), so there is nothing to
+    /// compare: the answers of that evaluation are returned as-is for Owner/Rrhh to review before completing.
+    /// </summary>
+    private EmployeeComparisonDto BuildSingleSourceReview(EvaluationType tipo, List<EvaluationSubmission> submissions)
+    {
+        var reference = submissions[0];
+        var self = FindSelfSubmission(submissions);
+        var manager = FindManagerSubmission(submissions);
+
+        var selfCompleted = self?.IsCompleted == true;
+        var managerCompleted = manager?.IsCompleted == true;
+        var isSelfSource = tipo == EvaluationType.Auto;
+        var source = isSelfSource ? self : manager;
+        var isReady = isSelfSource ? selfCompleted : managerCompleted;
+
+        var questions = isReady
+            ? reference.Template!.Preguntas
+                .OrderBy(q => q.Orden)
+                .Select(question => ReviewQuestion(question, DecryptAnswer(source!, question.Id), isSelfSource))
+                .ToList()
+            : [];
+
+        return new EmployeeComparisonDto(
+            reference.EvaluatedUserId,
+            $"{reference.EvaluatedUser!.Nombre} {reference.EvaluatedUser.Apellidos}",
+            reference.EvaluatedUser.Rol,
+            reference.TemplateId,
+            reference.Template!.Titulo,
+            manager?.RespondentUserId,
+            manager is null ? null : $"{manager.RespondentUser!.Nombre} {manager.RespondentUser.Apellidos}",
+            selfCompleted,
+            managerCompleted,
+            false,
+            isReady ? BuildSingleSourceSummary(questions) : null,
+            isReady ? BuildSingleSourceTopics(questions) : [],
+            questions,
+            0
+        );
+    }
+
+    private static QuestionComparisonDto ReviewQuestion(Question question, string? raw, bool isSelfSource)
+    {
+        if (question.Tipo == QuestionType.Seleccion)
+        {
+            var options = ParseOptions(raw);
+            return MapQuestion(question, null, null, isSelfSource ? options : null, isSelfSource ? null : options,
+                null, AlignmentLevel.NoComparable, GapDirection.Ninguna);
+        }
+
+        var value = ParseNumber(raw);
+        return MapQuestion(question, isSelfSource ? value : null, isSelfSource ? null : value, null, null,
+            null, AlignmentLevel.NoComparable, GapDirection.Ninguna);
+    }
+
+    private static ComparisonSummaryDto BuildSingleSourceSummary(List<QuestionComparisonDto> questions)
+    {
+        return new ComparisonSummaryDto(
+            questions.Count,
+            0,
+            0,
+            0,
+            questions.Count,
+            null,
+            AverageOrNull(questions.Where(q => q.SelfValue.HasValue).Select(q => q.SelfValue!.Value)),
+            AverageOrNull(questions.Where(q => q.ManagerValue.HasValue).Select(q => q.ManagerValue!.Value)),
+            null,
+            false
+        );
+    }
+
+    private static List<TopicComparisonDto> BuildSingleSourceTopics(List<QuestionComparisonDto> questions)
+    {
+        return questions
+            .Where(q => q.SelfValue.HasValue || q.ManagerValue.HasValue)
+            .GroupBy(q => q.Topic)
+            .Select(group => new TopicComparisonDto(
+                group.Key,
+                group.Count(),
+                AverageOrNull(group.Where(q => q.SelfValue.HasValue).Select(q => q.SelfValue!.Value)),
+                AverageOrNull(group.Where(q => q.ManagerValue.HasValue).Select(q => q.ManagerValue!.Value)),
+                null,
+                AlignmentLevel.NoComparable,
+                GapDirection.Ninguna))
+            .OrderBy(t => t.Topic)
+            .ToList();
     }
 
     private static List<QuestionComparisonDto> ApplyAcceptances(List<QuestionComparisonDto> questions, int templateId, int evaluatedUserId,

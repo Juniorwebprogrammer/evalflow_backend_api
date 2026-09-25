@@ -61,6 +61,7 @@ public record EmployeeComparisonDto(
 public record CycleComparisonsDto(
     int CycleId,
     string CycleName,
+    EvaluationType TipoEvaluacion,
     bool IsCompleted,
     DateTime? CompletedAt,
     int PendingImbalances,
