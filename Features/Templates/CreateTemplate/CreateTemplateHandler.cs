@@ -1,3 +1,4 @@
+using evalflow_backend_api.Infrastructure.Plans;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Infrastructure.Database;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
@@ -6,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace evalflow_backend_api.Features.Templates.CreateTemplate;
 
-public class CreateTemplateHandler(AppDbContext dbContext, ICurrentUserService currentUser) : IRequestHandler<CreateTemplateRecord, IResult>
+public class CreateTemplateHandler(AppDbContext dbContext, ICurrentUserService currentUser, IPlanLimitService planLimits) : IRequestHandler<CreateTemplateRecord, IResult>
 {
     public async Task<IResult> Handle(CreateTemplateRecord request, CancellationToken cancellationToken)
     {
@@ -18,6 +19,9 @@ public class CreateTemplateHandler(AppDbContext dbContext, ICurrentUserService c
 
         var company = await GetCompanyAsync(tenantId, cancellationToken);
         if (company is null) return Results.Unauthorized();
+
+        var limitError = await planLimits.CheckAsync(company.Id, PlanLimit.CustomTemplates, cancellationToken);
+        if (limitError is not null) return limitError;
 
         var template = await BuildAndSaveTemplateAsync(request, company.Id, cancellationToken);
 

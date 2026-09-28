@@ -12,6 +12,7 @@ using evalflow_backend_api.Features.Clarifications.GetCycleClarifications;
 using evalflow_backend_api.Features.Clarifications.GetMyClarifications;
 using evalflow_backend_api.Features.Clarifications.RespondClarification;
 using evalflow_backend_api.Features.Companies.DeleteCompanies;
+using evalflow_backend_api.Features.Plans;
 using evalflow_backend_api.Features.Companies.GetByIdentificationId;
 using evalflow_backend_api.Features.Companies.GetByName;
 using evalflow_backend_api.Features.Companies.UpdateCompaniesInformation;
@@ -119,6 +120,9 @@ public static class EndpointExtensions
         app.MapGetCompanyByIdentificationId();
         app.MapUpdateCompany();
         app.MapDeleteCompany();
+
+        // Plans
+        app.MapPlans();
 
         // Departments
         app.MapCreateDepartment();

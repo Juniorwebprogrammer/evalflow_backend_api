@@ -16,6 +16,9 @@ public class Template
     public DateTime FechaFin { get; set; }
     
     public int EmpresaID { get; set; }
+
+    /// <summary>Provisioned automatically at sign-up; doesn't count toward the plan's template limit.</summary>
+    public bool IsDefault { get; set; }
     
     public Company? Empresa { get; set; }
     

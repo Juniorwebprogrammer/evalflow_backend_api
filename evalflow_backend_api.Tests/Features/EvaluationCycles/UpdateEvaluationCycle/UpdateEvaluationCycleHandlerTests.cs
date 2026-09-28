@@ -1,3 +1,4 @@
+using evalflow_backend_api.Infrastructure.Plans;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Domain.Enums;
 using evalflow_backend_api.Features.EvaluationCycles.UpdateEvaluationCycle;
@@ -16,7 +17,7 @@ public class UpdateEvaluationCycleHandlerTests
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
     private UpdateEvaluationCycleHandler CreateSut(evalflow_backend_api.Infrastructure.Database.AppDbContext dbContext) =>
-        new(dbContext, _currentUser.Object);
+        new(dbContext, _currentUser.Object, new PlanLimitService(dbContext));
 
     [Fact]
     public async Task Handle_WithFechaInicioNotBeforeFechaFin_ReturnsBadRequest()

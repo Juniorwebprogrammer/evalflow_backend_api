@@ -1,3 +1,4 @@
+using evalflow_backend_api.Infrastructure.Plans;
 using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Infrastructure.Database;
@@ -13,7 +14,7 @@ using Microsoft.Extensions.Options;
 
 namespace evalflow_backend_api.Features.Team.InviteEmployee;
 
-public class InviteEmployeeHandler(AppDbContext dbContext, ICurrentUserService currentUser, IPasswordHasser interfacePasswordHasser, IEmailService emailService, IOptions<FrontendSettings> frontendSettings) 
+public class InviteEmployeeHandler(AppDbContext dbContext, ICurrentUserService currentUser, IPasswordHasser interfacePasswordHasser, IEmailService emailService, IOptions<FrontendSettings> frontendSettings, IPlanLimitService planLimits) 
     : IRequestHandler<InviteEmployeeRecord, IResult>
 {
     public async Task<IResult> Handle(InviteEmployeeRecord request, CancellationToken cancellationToken)
@@ -31,6 +32,9 @@ public class InviteEmployeeHandler(AppDbContext dbContext, ICurrentUserService c
             .FirstOrDefaultAsync(c => c.IdentificationId == tenantId, cancellationToken);
 
         if (company is null) return Results.NotFound("La empresa asociada al token no existe.");
+
+        var limitError = await planLimits.CheckAsync(company.Id, PlanLimit.Employees, cancellationToken);
+        if (limitError is not null) return limitError;
 
         var newEmployee = CreateEmployee(request, company);
         await SaveToDatabaseAsync(newEmployee, cancellationToken);

@@ -18,7 +18,9 @@ public class Company
     [MaxLength(50)]
     public required string IdentificationId { get; set; }
     
-    public required int PlanId { get; set; } 
+    public required int PlanId { get; set; }
+
+    public Plan? Plan { get; set; }
     
     [MaxLength(15)]
     public required string Cif { get; set; }

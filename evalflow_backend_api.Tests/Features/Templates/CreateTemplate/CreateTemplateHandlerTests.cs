@@ -1,3 +1,4 @@
+using evalflow_backend_api.Infrastructure.Plans;
 using evalflow_backend_api.Features.Templates.CreateTemplate;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
 using evalflow_backend_api.Tests.Common;
@@ -14,7 +15,7 @@ public class CreateTemplateHandlerTests
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
     private CreateTemplateHandler CreateSut(evalflow_backend_api.Infrastructure.Database.AppDbContext dbContext) =>
-        new(dbContext, _currentUser.Object);
+        new(dbContext, _currentUser.Object, new PlanLimitService(dbContext));
 
     private static readonly DateTime Start = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
     private static readonly DateTime End = new(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc);

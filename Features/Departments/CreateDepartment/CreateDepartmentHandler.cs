@@ -1,3 +1,4 @@
+using evalflow_backend_api.Infrastructure.Plans;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Infrastructure.Database;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
@@ -7,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace evalflow_backend_api.Features.Departments.CreateDepartment;
 
-public class CreateDepartmentHandler(AppDbContext dbContext, ICurrentUserService currentUser) : IRequestHandler<CreateDepartmentRecord, IResult>
+public class CreateDepartmentHandler(AppDbContext dbContext, ICurrentUserService currentUser, IPlanLimitService planLimits) : IRequestHandler<CreateDepartmentRecord, IResult>
 {
     public async Task<IResult> Handle(CreateDepartmentRecord request, CancellationToken cancellationToken)
     {
@@ -22,6 +23,9 @@ public class CreateDepartmentHandler(AppDbContext dbContext, ICurrentUserService
         {
             return Results.BadRequest(new { Message = "Empresa no encontrada." });
         }
+
+        var limitError = await planLimits.CheckAsync(company.Id, PlanLimit.Departments, cancellationToken);
+        if (limitError is not null) return limitError;
 
         var department = CreateDepartmentEntity(request, company.Id);
         await SaveDepartmentAsync(department, cancellationToken);

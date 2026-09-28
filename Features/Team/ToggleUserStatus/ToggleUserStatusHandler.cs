@@ -1,3 +1,4 @@
+using evalflow_backend_api.Infrastructure.Plans;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Infrastructure.Database;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
@@ -7,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace evalflow_backend_api.Features.Team.ToggleUserStatus;
 
-public class ToggleUserStatusHandler(AppDbContext dbContext, ICurrentUserService currentUser) : IRequestHandler<ToggleUserStatusRecord, IResult>
+public class ToggleUserStatusHandler(AppDbContext dbContext, ICurrentUserService currentUser, IPlanLimitService planLimits) : IRequestHandler<ToggleUserStatusRecord, IResult>
 {
     public async Task<IResult> Handle(ToggleUserStatusRecord request, CancellationToken cancellationToken)
     {
@@ -19,6 +20,13 @@ public class ToggleUserStatusHandler(AppDbContext dbContext, ICurrentUserService
 
         var employee = await GetEmployeeAsync(request.UserId, company.Id, cancellationToken);
         if (employee is null) return Results.NotFound("Empleado no encontrado.");
+
+        // Reactivating an account takes a seat again; deactivating is always allowed.
+        if (request.Activo && !employee.Activo)
+        {
+            var limitError = await planLimits.CheckAsync(company.Id, PlanLimit.Employees, cancellationToken);
+            if (limitError is not null) return limitError;
+        }
 
         await UpdateAndSaveStatusAsync(employee, request.Activo, cancellationToken);
 

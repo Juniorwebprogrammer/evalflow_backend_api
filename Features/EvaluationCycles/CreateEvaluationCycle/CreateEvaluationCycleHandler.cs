@@ -1,3 +1,4 @@
+using evalflow_backend_api.Infrastructure.Plans;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Infrastructure.Database;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
@@ -7,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace evalflow_backend_api.Features.EvaluationCycles.CreateEvaluationCycle;
 
-public class CreateEvaluationCycleHandler(AppDbContext dbContext, ICurrentUserService currentUser) : IRequestHandler<CreateEvaluationCycleRecord, IResult>
+public class CreateEvaluationCycleHandler(AppDbContext dbContext, ICurrentUserService currentUser, IPlanLimitService planLimits) : IRequestHandler<CreateEvaluationCycleRecord, IResult>
 {
     public async Task<IResult> Handle(CreateEvaluationCycleRecord request, CancellationToken cancellationToken)
     {
@@ -19,6 +20,11 @@ public class CreateEvaluationCycleHandler(AppDbContext dbContext, ICurrentUserSe
 
         var company = await GetCompanyAsync(tenantId, cancellationToken);
         if (company is null) return Results.Unauthorized();
+
+        // New cycles start inactive, so only the yearly quota applies here.
+        var limitError = await planLimits.CheckAsync(company.Id, PlanLimit.CyclesPerYear, cancellationToken,
+            year: request.FechaInicio.ToUniversalTime().Year);
+        if (limitError is not null) return limitError;
 
         var cycleId = await CreateAndSaveCycleAsync(request, company.Id, cancellationToken);
 

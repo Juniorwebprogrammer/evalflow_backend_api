@@ -1,3 +1,4 @@
+using evalflow_backend_api.Infrastructure.Plans;
 using System.Text;
 using evalflow_backend_api.Infrastructure.BackgroundJobs;
 using evalflow_backend_api.Infrastructure.Frontend;
@@ -19,6 +20,7 @@ public static class DependencyInjectionExtensions
         // Servicios de Dominio/Infraestructura
         services.AddScoped<IJwtProvider, JwtProvider>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<IPlanLimitService, PlanLimitService>();
         services.AddScoped<IPasswordHasser, PasswordHasher>();
         services.AddScoped<IEncryptionService, AesEncryptionService>();
         

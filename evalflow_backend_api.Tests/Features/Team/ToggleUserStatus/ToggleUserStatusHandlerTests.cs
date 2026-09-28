@@ -1,3 +1,4 @@
+using evalflow_backend_api.Infrastructure.Plans;
 using evalflow_backend_api.Features.Team.ToggleUserStatus;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
 using evalflow_backend_api.Tests.Common;
@@ -14,7 +15,7 @@ public class ToggleUserStatusHandlerTests
     private readonly Mock<ICurrentUserService> _currentUser = new();
 
     private ToggleUserStatusHandler CreateSut(evalflow_backend_api.Infrastructure.Database.AppDbContext dbContext) =>
-        new(dbContext, _currentUser.Object);
+        new(dbContext, _currentUser.Object, new PlanLimitService(dbContext));
 
     [Fact]
     public async Task Handle_WithoutTenantClaim_ReturnsUnauthorized()

@@ -48,6 +48,20 @@ public class RegisterOwnerHandlerTests
         (await db.Users.CountAsync()).Should().Be(0);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    public async Task Handle_WithUnknownPlan_ReturnsBadRequest(int planId)
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+        var sut = CreateSut(db);
+
+        var result = await sut.Handle(ValidRequest() with { PlanId = planId }, CancellationToken.None);
+
+        result.Should().HaveStatusCode(StatusCodes.Status400BadRequest);
+        (await db.Companies.CountAsync()).Should().Be(0);
+    }
+
     [Fact]
     public async Task Handle_WithShortPassword_ReturnsBadRequest()
     {

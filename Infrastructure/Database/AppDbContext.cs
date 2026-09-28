@@ -1,3 +1,4 @@
+using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,6 +23,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<DiscrepancyAcceptance> DiscrepancyAcceptances => Set<DiscrepancyAcceptance>();
     public DbSet<EvaluationResult> EvaluationResults => Set<EvaluationResult>();
     public DbSet<UserAvatar> UserAvatars => Set<UserAvatar>();
+    public DbSet<Plan> Plans => Set<Plan>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,6 +37,29 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithOne(u => u.Empresa)
                 .HasForeignKey(u => u.EmpresaID)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(c => c.Plan)
+                .WithMany()
+                .HasForeignKey(c => c.PlanId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Plan>(entity =>
+        {
+            entity.Property(p => p.Id).ValueGeneratedNever();
+            entity.HasIndex(p => p.Code).IsUnique();
+            entity.HasData(PlanCatalog.All.Select(p => new Plan
+            {
+                Id = p.Id,
+                Code = p.Code,
+                Nombre = p.Nombre,
+                MaxEmployees = p.MaxEmployees,
+                MaxActiveCycles = p.MaxActiveCycles,
+                MaxCyclesPerYear = p.MaxCyclesPerYear,
+                MaxCustomTemplates = p.MaxCustomTemplates,
+                MaxDepartments = p.MaxDepartments,
+                HasAiFeatures = p.HasAiFeatures,
+            }));
         });
 
         modelBuilder.Entity<User>(entity =>

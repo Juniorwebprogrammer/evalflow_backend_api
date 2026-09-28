@@ -46,6 +46,9 @@ public class RegisterOwnerHandler(AppDbContext dbContext, IJwtProvider interface
         if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains("@"))
             return Results.BadRequest("El email no es válido.");
         
+        if (!PlanCatalog.Exists(request.PlanId))
+            return Results.BadRequest(new { Message = "El plan seleccionado no es válido." });
+
         if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 6)
             return Results.BadRequest("La contraseña debe tener al menos 6 caracteres.");
         

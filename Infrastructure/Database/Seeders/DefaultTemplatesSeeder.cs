@@ -25,6 +25,7 @@ public static class DefaultTemplatesSeeder
     public static Template BuildEvaluacion180Template(int companyId) => new()
     {
         EmpresaID = companyId,
+        IsDefault = true,
         Titulo = "Standard 180° Template (Manager Only)",
         Descripcion = "One-way evaluation in which the manager assesses the employee's operational performance, quality of work and key competencies.",
         FechaInicio = DateTime.UtcNow,
@@ -48,6 +49,7 @@ public static class DefaultTemplatesSeeder
     public static Template BuildEvaluacion360Template(int companyId) => new()
     {
         EmpresaID = companyId,
+        IsDefault = true,
         Titulo = "Comprehensive 360° Template",
         Descripcion = "Complete evaluation in which the employee and their manager answer the same questions to compare self-perception with the manager's view.",
         FechaInicio = DateTime.UtcNow,
@@ -72,6 +74,7 @@ public static class DefaultTemplatesSeeder
     public static Template BuildAutoEvaluacionTemplate(int companyId) => new()
     {
         EmpresaID = companyId,
+        IsDefault = true,
         Titulo = "Self-Assessment Template",
         Descripcion = "Self-perception evaluation in which employees reflect on their own performance, strengths and motivation.",
         FechaInicio = DateTime.UtcNow,
