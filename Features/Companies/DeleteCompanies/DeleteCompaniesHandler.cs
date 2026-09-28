@@ -50,7 +50,54 @@ public class DeleteCompaniesHandler(AppDbContext dbContext, ICurrentUserService 
     
     private async Task DeleteCompanyAndSaveAsync(Domain.Entities.Company company, CancellationToken cancellationToken)
     {
+        var userIds = await dbContext.Users
+            .Where(u => u.EmpresaID == company.Id)
+            .Select(u => u.Id)
+            .ToListAsync(cancellationToken);
+        var cycleIds = await dbContext.EvaluationCycles
+            .Where(c => c.EmpresaID == company.Id)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken);
+
+        await RemoveEvaluationDataAsync(userIds, cycleIds, cancellationToken);
+        await RemoveUsersAsync(company.Id, cancellationToken);
+
         dbContext.Companies.Remove(company);
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task RemoveEvaluationDataAsync(List<int> userIds, List<int> cycleIds, CancellationToken cancellationToken)
+    {
+        dbContext.EvaluationResults.RemoveRange(await dbContext.EvaluationResults
+            .Where(r => cycleIds.Contains(r.EvaluationCycleId)
+                || userIds.Contains(r.EvaluatedUserId)
+                || userIds.Contains(r.CompletedByUserId))
+            .ToListAsync(cancellationToken));
+
+        dbContext.DiscrepancyAcceptances.RemoveRange(await dbContext.DiscrepancyAcceptances
+            .Where(a => cycleIds.Contains(a.EvaluationCycleId)
+                || userIds.Contains(a.EvaluatedUserId)
+                || userIds.Contains(a.AcceptedByUserId))
+            .ToListAsync(cancellationToken));
+
+        dbContext.ClarificationRequests.RemoveRange(await dbContext.ClarificationRequests
+            .Where(c => cycleIds.Contains(c.EvaluationCycleId)
+                || userIds.Contains(c.EvaluatedUserId)
+                || userIds.Contains(c.ManagerUserId)
+                || userIds.Contains(c.RequestedByUserId))
+            .ToListAsync(cancellationToken));
+
+        dbContext.EvaluationSubmissions.RemoveRange(await dbContext.EvaluationSubmissions
+            .Where(s => cycleIds.Contains(s.EvaluationCycleId)
+                || userIds.Contains(s.EvaluatedUserId)
+                || userIds.Contains(s.RespondentUserId))
+            .ToListAsync(cancellationToken));
+    }
+
+    private async Task RemoveUsersAsync(int companyId, CancellationToken cancellationToken)
+    {
+        dbContext.Users.RemoveRange(await dbContext.Users
+            .Where(u => u.EmpresaID == companyId)
+            .ToListAsync(cancellationToken));
     }
 }

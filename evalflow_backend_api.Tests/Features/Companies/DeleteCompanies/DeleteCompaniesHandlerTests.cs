@@ -1,3 +1,4 @@
+using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Features.Companies.DeleteCompanies;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
 using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
@@ -128,5 +129,46 @@ public class DeleteCompaniesHandlerTests
 
         result.Should().HaveStatusCode(StatusCodes.Status200OK);
         (await db.Companies.AnyAsync(c => c.IdentificationId == "tenant-1")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_CompanyWithEvaluationData_DeletesUsersAndEvaluationData()
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+        var company = TestDataFactory.CreateCompany(identificationId: "tenant-1");
+        var owner = TestDataFactory.CreateUser(company, passwordHash: "stored-hash");
+        var employee = TestDataFactory.CreateUser(company);
+        db.Companies.Add(company);
+        db.Users.AddRange(owner, employee);
+        await db.SaveChangesAsync();
+
+        employee.SuperiorId = owner.Id;
+        var template = new Template { EmpresaID = company.Id, Titulo = "Template" };
+        var cycle = new EvaluationCycle { EmpresaID = company.Id, Nombre = "Cycle" };
+        db.Templates.Add(template);
+        db.EvaluationCycles.Add(cycle);
+        await db.SaveChangesAsync();
+
+        db.EvaluationSubmissions.Add(new EvaluationSubmission { EvaluationCycleId = cycle.Id, TemplateId = template.Id, EvaluatedUserId = employee.Id, RespondentUserId = owner.Id });
+        db.EvaluationResults.Add(new EvaluationResult { EvaluationCycleId = cycle.Id, TemplateId = template.Id, EvaluatedUserId = employee.Id, CompletedByUserId = owner.Id, EncryptedSnapshot = "snapshot" });
+        db.ClarificationRequests.Add(new ClarificationRequest { EvaluationCycleId = cycle.Id, TemplateId = template.Id, EvaluatedUserId = employee.Id, ManagerUserId = owner.Id, RequestedByUserId = owner.Id, Mensaje = "message" });
+        db.DiscrepancyAcceptances.Add(new DiscrepancyAcceptance { EvaluationCycleId = cycle.Id, TemplateId = template.Id, EvaluatedUserId = employee.Id, AcceptedByUserId = owner.Id });
+        await db.SaveChangesAsync();
+
+        _currentUser.Setup(c => c.GetIdentificationId()).Returns("tenant-1");
+        _currentUser.Setup(c => c.GetUserId()).Returns(owner.Id.ToString());
+        _passwordHasher.Setup(p => p.Verify("correct-password", "stored-hash")).Returns(true);
+
+        var sut = CreateSut(db);
+
+        var result = await sut.Handle(new DeleteCompaniesRecord("correct-password"), CancellationToken.None);
+
+        result.Should().HaveStatusCode(StatusCodes.Status200OK);
+        (await db.Companies.AnyAsync()).Should().BeFalse();
+        (await db.Users.AnyAsync()).Should().BeFalse();
+        (await db.EvaluationSubmissions.AnyAsync()).Should().BeFalse();
+        (await db.EvaluationResults.AnyAsync()).Should().BeFalse();
+        (await db.ClarificationRequests.AnyAsync()).Should().BeFalse();
+        (await db.DiscrepancyAcceptances.AnyAsync()).Should().BeFalse();
     }
 }
