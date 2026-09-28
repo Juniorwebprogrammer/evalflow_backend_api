@@ -1,4 +1,5 @@
 using evalflow_backend_api.Domain.Entities;
+using evalflow_backend_api.Domain.Enums;
 using evalflow_backend_api.Infrastructure.Database.Seeders;
 using evalflow_backend_api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
@@ -21,9 +22,9 @@ public class DefaultTemplatesSeederTests
 
         var titles = await db.Templates.Where(t => t.EmpresaID == company.Id).Select(t => t.Titulo).ToListAsync();
         titles.Should().HaveCount(3);
-        titles.Should().Contain("Plantilla Estándar 180° (Solo Mánager)");
-        titles.Should().Contain("Plantilla Integral 360°");
-        titles.Should().Contain("Plantilla de Autoevaluación");
+        titles.Should().Contain("Standard 180° Template (Manager Only)");
+        titles.Should().Contain("Comprehensive 360° Template");
+        titles.Should().Contain("Self-Assessment Template");
     }
 
     [Fact]
@@ -38,7 +39,7 @@ public class DefaultTemplatesSeederTests
 
         var templates = await db.Templates.Include(t => t.Preguntas).Where(t => t.EmpresaID == company.Id).ToListAsync();
         templates.Should().AllSatisfy(t => t.Preguntas.Should().NotBeEmpty());
-        templates.Sum(t => t.Preguntas.Count).Should().Be(8); // 2 (180) + 3 (360) + 3 (auto)
+        templates.Sum(t => t.Preguntas.Count).Should().Be(34); // 11 (180) + 12 (360) + 11 (auto)
     }
 
     [Fact]
@@ -93,9 +94,9 @@ public class DefaultTemplatesSeederTests
         var template = DefaultTemplatesSeeder.BuildEvaluacion180Template(companyId: 42);
 
         template.EmpresaID.Should().Be(42);
-        template.Titulo.Should().Be("Plantilla Estándar 180° (Solo Mánager)");
-        template.Preguntas.Should().HaveCount(2);
-        template.Preguntas.Select(q => q.Orden).Should().Equal(1, 2);
+        template.Titulo.Should().Be("Standard 180° Template (Manager Only)");
+        template.Preguntas.Should().HaveCount(11);
+        template.Preguntas.Select(q => q.Orden).Should().Equal(Enumerable.Range(1, 11));
     }
 
     // ----- BuildEvaluacion360Template -----
@@ -106,9 +107,9 @@ public class DefaultTemplatesSeederTests
         var template = DefaultTemplatesSeeder.BuildEvaluacion360Template(companyId: 42);
 
         template.EmpresaID.Should().Be(42);
-        template.Titulo.Should().Be("Plantilla Integral 360°");
-        template.Preguntas.Should().HaveCount(3);
-        template.Preguntas.Select(q => q.Orden).Should().Equal(1, 2, 3);
+        template.Titulo.Should().Be("Comprehensive 360° Template");
+        template.Preguntas.Should().HaveCount(12);
+        template.Preguntas.Select(q => q.Orden).Should().Equal(Enumerable.Range(1, 12));
     }
 
     // ----- BuildAutoEvaluacionTemplate -----
@@ -119,8 +120,39 @@ public class DefaultTemplatesSeederTests
         var template = DefaultTemplatesSeeder.BuildAutoEvaluacionTemplate(companyId: 42);
 
         template.EmpresaID.Should().Be(42);
-        template.Titulo.Should().Be("Plantilla de Autoevaluación");
-        template.Preguntas.Should().HaveCount(3);
-        template.Preguntas.Select(q => q.Orden).Should().Equal(1, 2, 3);
+        template.Titulo.Should().Be("Self-Assessment Template");
+        template.Preguntas.Should().HaveCount(11);
+        template.Preguntas.Select(q => q.Orden).Should().Equal(Enumerable.Range(1, 11));
+    }
+
+    public static TheoryData<string> TemplateBuilders => new() { "180", "360", "auto" };
+
+    private static Template BuildTemplate(string kind) => kind switch
+    {
+        "180" => DefaultTemplatesSeeder.BuildEvaluacion180Template(companyId: 42),
+        "360" => DefaultTemplatesSeeder.BuildEvaluacion360Template(companyId: 42),
+        _ => DefaultTemplatesSeeder.BuildAutoEvaluacionTemplate(companyId: 42)
+    };
+
+    [Theory]
+    [MemberData(nameof(TemplateBuilders))]
+    public void DefaultTemplates_GroupQuestionsInSeveralExplicitTopics(string kind)
+    {
+        var template = BuildTemplate(kind);
+
+        template.Preguntas.Should().AllSatisfy(q => q.Topic.Should().NotBeNullOrWhiteSpace().And.NotBe("General"));
+        template.Preguntas.Select(q => q.Topic).Distinct().Should().HaveCountGreaterThanOrEqualTo(6);
+    }
+
+    [Theory]
+    [MemberData(nameof(TemplateBuilders))]
+    public void DefaultTemplates_SelectionQuestionsHaveOptionsAndOthersDoNot(string kind)
+    {
+        var template = BuildTemplate(kind);
+
+        template.Preguntas.Where(q => q.Tipo == QuestionType.Seleccion)
+            .Should().AllSatisfy(q => q.Opciones.Should().NotBeNullOrEmpty());
+        template.Preguntas.Where(q => q.Tipo != QuestionType.Seleccion)
+            .Should().AllSatisfy(q => q.Opciones.Should().BeNull());
     }
 }

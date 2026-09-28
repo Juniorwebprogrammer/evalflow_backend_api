@@ -89,8 +89,8 @@ public class RegisterOwnerEndpointTests : IntegrationTestBase
             .ToListAsync();
 
         templateTitles.Should().HaveCount(3);
-        templateTitles.Should().Contain("Plantilla Estándar 180° (Solo Mánager)");
-        templateTitles.Should().Contain("Plantilla Integral 360°");
-        templateTitles.Should().Contain("Plantilla de Autoevaluación");
+        templateTitles.Should().Contain("Standard 180° Template (Manager Only)");
+        templateTitles.Should().Contain("Comprehensive 360° Template");
+        templateTitles.Should().Contain("Self-Assessment Template");
     }
 }
