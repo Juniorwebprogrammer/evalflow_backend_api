@@ -33,12 +33,18 @@ public class InviteEmployeeHandler(AppDbContext dbContext, ICurrentUserService c
 
         if (company is null) return Results.NotFound("La empresa asociada al token no existe.");
 
-        var limitError = await planLimits.CheckAsync(company.Id, PlanLimit.Employees, cancellationToken);
+        var newEmployee = CreateEmployee(request, company);
+        // Check + insert under the company's plan lock, so concurrent invitations can't overshoot.
+        var limitError = await planLimits.RunExclusiveAsync(company.Id, async ct =>
+        {
+            var error = await planLimits.CheckAsync(company.Id, PlanLimit.Employees, ct);
+            if (error is not null) return error;
+            await SaveToDatabaseAsync(newEmployee, ct);
+            return null;
+        }, cancellationToken);
         if (limitError is not null) return limitError;
 
-        var newEmployee = CreateEmployee(request, company);
-        await SaveToDatabaseAsync(newEmployee, cancellationToken);
-
+        // Outside the lock: the email can be slow and doesn't affect the count.
         await SendInvitationEmailAsync(newEmployee, company.Nombre, cancellationToken);
         
         return GenerateSuccessResponse(newEmployee);

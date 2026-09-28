@@ -24,11 +24,15 @@ public class CreateDepartmentHandler(AppDbContext dbContext, ICurrentUserService
             return Results.BadRequest(new { Message = "Empresa no encontrada." });
         }
 
-        var limitError = await planLimits.CheckAsync(company.Id, PlanLimit.Departments, cancellationToken);
-        if (limitError is not null) return limitError;
-
         var department = CreateDepartmentEntity(request, company.Id);
-        await SaveDepartmentAsync(department, cancellationToken);
+        var limitError = await planLimits.RunExclusiveAsync(company.Id, async ct =>
+        {
+            var error = await planLimits.CheckAsync(company.Id, PlanLimit.Departments, ct);
+            if (error is not null) return error;
+            await SaveDepartmentAsync(department, ct);
+            return null;
+        }, cancellationToken);
+        if (limitError is not null) return limitError;
 
         return GenerateSuccessResponse(department.Id);
     }

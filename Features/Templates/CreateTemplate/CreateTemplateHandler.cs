@@ -20,12 +20,17 @@ public class CreateTemplateHandler(AppDbContext dbContext, ICurrentUserService c
         var company = await GetCompanyAsync(tenantId, cancellationToken);
         if (company is null) return Results.Unauthorized();
 
-        var limitError = await planLimits.CheckAsync(company.Id, PlanLimit.CustomTemplates, cancellationToken);
+        Template? template = null;
+        var limitError = await planLimits.RunExclusiveAsync(company.Id, async ct =>
+        {
+            var error = await planLimits.CheckAsync(company.Id, PlanLimit.CustomTemplates, ct);
+            if (error is not null) return error;
+            template = await BuildAndSaveTemplateAsync(request, company.Id, ct);
+            return null;
+        }, cancellationToken);
         if (limitError is not null) return limitError;
 
-        var template = await BuildAndSaveTemplateAsync(request, company.Id, cancellationToken);
-
-        return Results.Created($"/templates/{template.Id}", new { Message = "Plantilla creada con éxito.", Id = template.Id });
+        return Results.Created($"/templates/{template!.Id}", new { Message = "Plantilla creada con éxito.", Id = template.Id });
     }
 
     private async Task<Company?> GetCompanyAsync(string tenantId, CancellationToken cancellationToken)

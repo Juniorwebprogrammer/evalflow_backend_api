@@ -26,10 +26,14 @@ public class UpdateEvaluationCycleHandler(AppDbContext dbContext, ICurrentUserSe
 
         if (cycle.FechaCompletado.HasValue) return Results.Conflict(new { Message = "El ciclo ya se ha completado y no admite cambios." });
 
-        var limitError = await CheckPlanLimitsAsync(cycle, request, company.Id, cancellationToken);
+        var limitError = await planLimits.RunExclusiveAsync(company.Id, async ct =>
+        {
+            var error = await CheckPlanLimitsAsync(cycle, request, company.Id, ct);
+            if (error is not null) return error;
+            await UpdateAndSaveCycleAsync(cycle, request, ct);
+            return null;
+        }, cancellationToken);
         if (limitError is not null) return limitError;
-
-        await UpdateAndSaveCycleAsync(cycle, request, cancellationToken);
 
         return Results.Ok(new { Message = "Ciclo actualizado correctamente." });
     }

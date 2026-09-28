@@ -21,12 +21,17 @@ public class CreateEvaluationCycleHandler(AppDbContext dbContext, ICurrentUserSe
         var company = await GetCompanyAsync(tenantId, cancellationToken);
         if (company is null) return Results.Unauthorized();
 
-        // New cycles start inactive, so only the yearly quota applies here.
-        var limitError = await planLimits.CheckAsync(company.Id, PlanLimit.CyclesPerYear, cancellationToken,
-            year: request.FechaInicio.ToUniversalTime().Year);
+        var cycleId = 0;
+        var limitError = await planLimits.RunExclusiveAsync(company.Id, async ct =>
+        {
+            // New cycles start inactive, so only the yearly quota applies here.
+            var error = await planLimits.CheckAsync(company.Id, PlanLimit.CyclesPerYear, ct,
+                year: request.FechaInicio.ToUniversalTime().Year);
+            if (error is not null) return error;
+            cycleId = await CreateAndSaveCycleAsync(request, company.Id, ct);
+            return null;
+        }, cancellationToken);
         if (limitError is not null) return limitError;
-
-        var cycleId = await CreateAndSaveCycleAsync(request, company.Id, cancellationToken);
 
         return Results.Created($"/evaluation-cycles/{cycleId}", new { Message = "Ciclo de evaluación creado con éxito.", Id = cycleId });
     }

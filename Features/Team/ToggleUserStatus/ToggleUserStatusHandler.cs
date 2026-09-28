@@ -21,14 +21,18 @@ public class ToggleUserStatusHandler(AppDbContext dbContext, ICurrentUserService
         var employee = await GetEmployeeAsync(request.UserId, company.Id, cancellationToken);
         if (employee is null) return Results.NotFound("Empleado no encontrado.");
 
-        // Reactivating an account takes a seat again; deactivating is always allowed.
-        if (request.Activo && !employee.Activo)
+        var limitError = await planLimits.RunExclusiveAsync(company.Id, async ct =>
         {
-            var limitError = await planLimits.CheckAsync(company.Id, PlanLimit.Employees, cancellationToken);
-            if (limitError is not null) return limitError;
-        }
-
-        await UpdateAndSaveStatusAsync(employee, request.Activo, cancellationToken);
+            // Reactivating an account takes a seat again; deactivating is always allowed.
+            if (request.Activo && !employee.Activo)
+            {
+                var error = await planLimits.CheckAsync(company.Id, PlanLimit.Employees, ct);
+                if (error is not null) return error;
+            }
+            await UpdateAndSaveStatusAsync(employee, request.Activo, ct);
+            return null;
+        }, cancellationToken);
+        if (limitError is not null) return limitError;
 
         var statusMessage = request.Activo ? "activada" : "desactivada";
         return Results.Ok(new { Message = $"La cuenta del empleado ha sido {statusMessage} correctamente." });

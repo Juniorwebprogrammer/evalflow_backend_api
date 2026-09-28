@@ -43,6 +43,15 @@ public interface IPlanLimitService
         int adding = 1, int? year = null, int? excludeCycleId = null);
 
     Task<bool> HasFeatureAsync(int companyId, PlanFeature feature, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Runs <paramref name="action"/> — typically <see cref="CheckAsync"/> followed by the
+    /// insert/update it guards — inside a transaction holding a per-company lock, so two
+    /// concurrent requests can't both pass the check and overshoot a limit. Returns what
+    /// the action returns (a limit error, or null on success).
+    /// </summary>
+    Task<IResult?> RunExclusiveAsync(int companyId, Func<CancellationToken, Task<IResult?>> action,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -95,6 +104,28 @@ public class PlanLimitService(AppDbContext dbContext) : IPlanLimitService
             PlanFeature.Ai => plan.HasAiFeatures,
             _ => false,
         };
+    }
+
+    /// <summary>First key of the two-int advisory lock, namespacing it to plan limits.</summary>
+    private const int PlanLockNamespace = 7351;
+
+    public async Task<IResult?> RunExclusiveAsync(int companyId, Func<CancellationToken, Task<IResult?>> action,
+        CancellationToken cancellationToken)
+    {
+        // The in-memory provider (unit tests) has neither transactions nor advisory locks.
+        if (!dbContext.Database.IsRelational() || dbContext.Database.CurrentTransaction is not null)
+            return await action(cancellationToken);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        // Released automatically at commit/rollback; concurrent callers for the same
+        // company wait here until the first one has saved (or bailed out).
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock({PlanLockNamespace}, {companyId})", cancellationToken);
+
+        var result = await action(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return result;
     }
 
     public static int? MaxFor(Plan plan, PlanLimit limit) => limit switch
