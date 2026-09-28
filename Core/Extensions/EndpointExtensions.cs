@@ -46,6 +46,7 @@ using evalflow_backend_api.Features.JobPositions.CreateJobPosition;
 using evalflow_backend_api.Features.JobPositions.GetJobPositions;
 using evalflow_backend_api.Features.JobPositions.ManageJobPositions;
 using evalflow_backend_api.Features.Onboarding.RegisterOwner;
+using evalflow_backend_api.Features.Profile.Avatar;
 using evalflow_backend_api.Features.Profile.ChangePassword;
 using evalflow_backend_api.Features.Profile.DeleteAccount;
 using evalflow_backend_api.Features.Profile.GetProfileInformation;
@@ -109,6 +110,7 @@ public static class EndpointExtensions
         // Profile
         app.MapGetProfile();
         app.MapUpdateProfile();
+        app.MapProfileAvatar();
         app.MapChangePassword();
         app.MapDeleteAccount();
 

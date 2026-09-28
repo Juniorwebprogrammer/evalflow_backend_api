@@ -21,6 +21,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<EmailOutboxMessage> EmailOutboxMessages => Set<EmailOutboxMessage>();
     public DbSet<DiscrepancyAcceptance> DiscrepancyAcceptances => Set<DiscrepancyAcceptance>();
     public DbSet<EvaluationResult> EvaluationResults => Set<EvaluationResult>();
+    public DbSet<UserAvatar> UserAvatars => Set<UserAvatar>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -49,6 +50,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(u => u.CargoId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
             
+        });
+
+        modelBuilder.Entity<UserAvatar>(entity =>
+        {
+            entity.HasKey(a => a.UserId);
+            entity.HasOne(a => a.User)
+                .WithOne()
+                .HasForeignKey<UserAvatar>(a => a.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Template>(entity =>

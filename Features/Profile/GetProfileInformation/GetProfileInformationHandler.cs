@@ -33,7 +33,11 @@ public class GetProfileInformationHandler(AppDbContext dbContext, ICurrentUserSe
                 user.FechaCreacion,
                 user.Empresa!.Nombre,
                 user.Empresa!.IdentificationId,
-                user.TwoFactorEnabled
+                user.TwoFactorEnabled,
+                dbContext.UserAvatars
+                    .Where(avatar => avatar.UserId == user.Id)
+                    .Select(avatar => (DateTime?)avatar.UpdatedAt)
+                    .FirstOrDefault()
             ))
             .FirstOrDefaultAsync(cancellationToken);
     }

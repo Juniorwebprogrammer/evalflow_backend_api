@@ -12,5 +12,7 @@ public record GetProfileInformationDTO(
     DateTime FechaCreacion,
     string NombreEmpresa,
     string IdentificationId,
-    bool TwoFactorAuthentication
+    bool TwoFactorAuthentication,
+    /// <summary>When the profile picture last changed; null without one. Doubles as a cache-buster.</summary>
+    DateTime? AvatarUpdatedAt
 );
