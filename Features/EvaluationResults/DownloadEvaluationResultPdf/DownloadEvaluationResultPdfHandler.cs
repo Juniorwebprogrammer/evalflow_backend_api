@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Domain.Entities;
-using evalflow_backend_api.Domain.Enums;
 using evalflow_backend_api.Features.EvaluationResults.EvaluationResultsDto;
 using evalflow_backend_api.Infrastructure.Database;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
@@ -11,9 +10,6 @@ using evalflow_backend_api.Infrastructure.Security.Encryption;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using QuestPDF.Fluent;
-using QuestPDF.Helpers;
-using QuestPDF.Infrastructure;
 
 namespace evalflow_backend_api.Features.EvaluationResults.DownloadEvaluationResultPdf;
 
@@ -24,9 +20,6 @@ public class DownloadEvaluationResultPdfHandler(
     ILogger<DownloadEvaluationResultPdfHandler> logger
 ) : IRequestHandler<DownloadEvaluationResultPdfRecord, IResult>
 {
-    private const string BrandColor = "#2563eb";
-    private static readonly CultureInfo Spanish = CultureInfo.GetCultureInfo("es-ES");
-
     public async Task<IResult> Handle(DownloadEvaluationResultPdfRecord request, CancellationToken cancellationToken)
     {
         if (!int.TryParse(currentUser.GetUserId(), out var userId)) return Results.Unauthorized();
@@ -43,7 +36,7 @@ public class DownloadEvaluationResultPdfHandler(
         if (snapshot is null)
             return Results.Problem("No se pudo leer el resultado de la evaluación.", statusCode: StatusCodes.Status500InternalServerError);
 
-        var pdf = GeneratePdf(snapshot);
+        var pdf = EvaluationResultPdfDocument.Generate(snapshot);
 
         return Results.File(pdf, "application/pdf", BuildFileName(snapshot));
     }
@@ -70,156 +63,6 @@ public class DownloadEvaluationResultPdfHandler(
             return null;
         }
     }
-
-    private static byte[] GeneratePdf(EvaluationResultSnapshot snapshot)
-    {
-        return Document.Create(container =>
-        {
-            container.Page(page =>
-            {
-                page.Size(PageSizes.A4);
-                page.Margin(36);
-                page.PageColor(Colors.White);
-                page.DefaultTextStyle(style => style.FontSize(9.5f).FontColor(Colors.Grey.Darken3));
-
-                page.Header().Element(header => ComposeHeader(header, snapshot));
-                page.Content().PaddingVertical(16).Element(content => ComposeContent(content, snapshot));
-                page.Footer().Element(footer => ComposeFooter(footer, snapshot));
-            });
-        }).GeneratePdf();
-    }
-
-    private static void ComposeHeader(IContainer container, EvaluationResultSnapshot snapshot)
-    {
-        container.Column(column =>
-        {
-            column.Item().Row(row =>
-            {
-                row.RelativeItem().Column(title =>
-                {
-                    title.Item().Text(text =>
-                    {
-                        text.Span("Eval").FontSize(20).Bold().FontColor(Colors.Grey.Darken4);
-                        text.Span("Flow").FontSize(20).Bold().FontColor(BrandColor);
-                    });
-                    title.Item().Text("Informe de resultados de evaluación").FontSize(12).SemiBold();
-                });
-                row.ConstantItem(180).AlignRight().Column(meta =>
-                {
-                    meta.Item().AlignRight().Text(snapshot.CompanyName).SemiBold();
-                    meta.Item().AlignRight().Text($"Completado el {FormatDate(snapshot.CompletedAt)}").FontSize(8.5f).FontColor(Colors.Grey.Medium);
-                });
-            });
-            column.Item().PaddingTop(8).LineHorizontal(1).LineColor(BrandColor);
-        });
-    }
-
-    private static void ComposeContent(IContainer container, EvaluationResultSnapshot snapshot)
-    {
-        container.Column(column =>
-        {
-            column.Spacing(14);
-            column.Item().Element(c => ComposeDetails(c, snapshot));
-            column.Item().Element(c => ComposeQuestions(c, snapshot));
-        });
-    }
-
-    private static void ComposeDetails(IContainer container, EvaluationResultSnapshot snapshot)
-    {
-        container.Background(Colors.Grey.Lighten5).Padding(12).Row(row =>
-        {
-            row.RelativeItem().Column(left =>
-            {
-                left.Spacing(3);
-                DetailLine(left, "Empleado", snapshot.EvaluatedUserName);
-                DetailLine(left, "Puesto", snapshot.Cargo ?? "—");
-                DetailLine(left, "Departamento", snapshot.Departamento ?? "—");
-                DetailLine(left, "Evaluador", snapshot.ManagerName ?? "—");
-            });
-            row.RelativeItem().Column(right =>
-            {
-                right.Spacing(3);
-                DetailLine(right, "Ciclo", snapshot.CycleName);
-                DetailLine(right, "Tipo", EvaluationTypeLabel(snapshot.TipoEvaluacion));
-                DetailLine(right, "Periodo", $"{FormatDate(snapshot.FechaInicio)} – {FormatDate(snapshot.FechaFin)}");
-                DetailLine(right, "Plantilla", snapshot.TemplateTitle);
-            });
-        });
-    }
-
-    private static void DetailLine(ColumnDescriptor column, string label, string value)
-    {
-        column.Item().Text(text =>
-        {
-            text.Span($"{label}: ").SemiBold().FontColor(Colors.Grey.Darken1);
-            text.Span(value);
-        });
-    }
-
-    private static void ComposeQuestions(IContainer container, EvaluationResultSnapshot snapshot)
-    {
-        container.Column(column =>
-        {
-            column.Item().PaddingBottom(6).Text("Resultados por pregunta").FontSize(11).SemiBold();
-
-            column.Item().Table(table =>
-            {
-                table.ColumnsDefinition(columns =>
-                {
-                    columns.RelativeColumn(5);
-                    columns.RelativeColumn(2);
-                });
-
-                table.Header(header =>
-                {
-                    foreach (var title in new[] { "Pregunta", "Resultado" })
-                    {
-                        header.Cell().Background(BrandColor).PaddingVertical(5).PaddingHorizontal(6)
-                            .Text(title).FontSize(8.5f).SemiBold().FontColor(Colors.White);
-                    }
-                });
-
-                foreach (var question in snapshot.Questions.OrderBy(q => q.Orden))
-                {
-                    QuestionCell(table).Column(cell =>
-                    {
-                        cell.Item().Text(question.Texto).SemiBold();
-                        cell.Item().Text(question.Topic).FontSize(7.5f).FontColor(Colors.Grey.Medium);
-                    });
-                    QuestionCell(table).Text(question.FinalAnswer ?? "—").Bold().FontColor(BrandColor);
-                }
-            });
-        });
-    }
-
-    private static IContainer QuestionCell(TableDescriptor table) =>
-        table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingVertical(6).PaddingHorizontal(6);
-
-    private static void ComposeFooter(IContainer container, EvaluationResultSnapshot snapshot)
-    {
-        container.Row(row =>
-        {
-            row.RelativeItem().Text($"{snapshot.EvaluatedUserName} · {snapshot.CycleName}").FontSize(8).FontColor(Colors.Grey.Medium);
-            row.RelativeItem().AlignRight().Text(text =>
-            {
-                text.DefaultTextStyle(style => style.FontSize(8).FontColor(Colors.Grey.Medium));
-                text.Span("Página ");
-                text.CurrentPageNumber();
-                text.Span(" de ");
-                text.TotalPages();
-            });
-        });
-    }
-
-    private static string EvaluationTypeLabel(EvaluationType type) => type switch
-    {
-        EvaluationType.Auto => "Autoevaluación",
-        EvaluationType.Evaluacion180 => "Evaluación 180°",
-        EvaluationType.Evaluacion360 => "Evaluación 360°",
-        _ => type.ToString()
-    };
-
-    private static string FormatDate(DateTime date) => date.ToString("dd/MM/yyyy", Spanish);
 
     private static string BuildFileName(EvaluationResultSnapshot snapshot)
     {
