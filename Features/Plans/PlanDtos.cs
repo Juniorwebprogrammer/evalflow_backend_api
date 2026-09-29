@@ -13,13 +13,15 @@ public record PlanDto(
     int? MaxCyclesPerYear,
     int? MaxCustomTemplates,
     int? MaxDepartments,
-    bool HasAiFeatures)
+    bool HasAiFeatures,
+    int? MaxAiAnalysesPerMonth)
 {
     public static PlanDto From(Plan plan) => new(plan.Id, plan.Code, plan.Nombre, plan.MaxEmployees,
-        plan.MaxActiveCycles, plan.MaxCyclesPerYear, plan.MaxCustomTemplates, plan.MaxDepartments, plan.HasAiFeatures);
+        plan.MaxActiveCycles, plan.MaxCyclesPerYear, plan.MaxCustomTemplates, plan.MaxDepartments, plan.HasAiFeatures,
+        plan.MaxAiAnalysesPerMonth);
 }
 
-public record PlanUsageDto(int Employees, int ActiveCycles, int CyclesThisYear, int CustomTemplates, int Departments);
+public record PlanUsageDto(int Employees, int ActiveCycles, int CyclesThisYear, int CustomTemplates, int Departments, int AiAnalysesThisMonth);
 
 /// <summary>The caller's company plan plus how much of each limit it uses.</summary>
 public record CompanyPlanDto(PlanDto Plan, PlanUsageDto Usage);

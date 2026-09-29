@@ -24,6 +24,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<EvaluationResult> EvaluationResults => Set<EvaluationResult>();
     public DbSet<UserAvatar> UserAvatars => Set<UserAvatar>();
     public DbSet<Plan> Plans => Set<Plan>();
+    public DbSet<AiEvaluationAnalysis> AiEvaluationAnalyses => Set<AiEvaluationAnalysis>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,6 +60,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 MaxCustomTemplates = p.MaxCustomTemplates,
                 MaxDepartments = p.MaxDepartments,
                 HasAiFeatures = p.HasAiFeatures,
+                MaxAiAnalysesPerMonth = p.MaxAiAnalysesPerMonth,
             }));
         });
 
@@ -237,6 +239,38 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             entity.HasIndex(r => new { r.EvaluationCycleId, r.TemplateId, r.EvaluatedUserId }).IsUnique();
             entity.HasIndex(r => r.EvaluatedUserId);
+        });
+
+        modelBuilder.Entity<AiEvaluationAnalysis>(entity =>
+        {
+            entity.HasOne(a => a.Empresa)
+                .WithMany()
+                .HasForeignKey(a => a.EmpresaID)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.Cycle)
+                .WithMany()
+                .HasForeignKey(a => a.EvaluationCycleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.Template)
+                .WithMany()
+                .HasForeignKey(a => a.TemplateId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(a => a.EvaluatedUser)
+                .WithMany()
+                .HasForeignKey(a => a.EvaluatedUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(a => a.RequestedByUser)
+                .WithMany()
+                .HasForeignKey(a => a.RequestedByUserId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(a => new { a.EvaluationCycleId, a.TemplateId, a.EvaluatedUserId });
+            entity.HasIndex(a => new { a.Estado, a.NextAttemptAt });
+            entity.HasIndex(a => new { a.EmpresaID, a.FechaCreacion });
         });
     }
 }

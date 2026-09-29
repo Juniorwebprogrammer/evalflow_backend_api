@@ -1,5 +1,6 @@
 using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Domain.Entities;
+using evalflow_backend_api.Domain.Enums;
 using evalflow_backend_api.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,6 +14,7 @@ public enum PlanLimit
     CyclesPerYear,
     CustomTemplates,
     Departments,
+    AiAnalysesPerMonth,
 }
 
 /// <summary>A feature only some plans include.</summary>
@@ -22,7 +24,7 @@ public enum PlanFeature
 }
 
 /// <summary>Current consumption of every capped resource.</summary>
-public record PlanUsage(int Employees, int ActiveCycles, int CyclesThisYear, int CustomTemplates, int Departments);
+public record PlanUsage(int Employees, int ActiveCycles, int CyclesThisYear, int CustomTemplates, int Departments, int AiAnalysesThisMonth);
 
 /// <summary>Body of the 403 returned when a plan limit blocks an action (stable <c>Code</c> for the frontend).</summary>
 public record PlanLimitError(string Code, string Message, string Resource, int Limit, int Current, int PlanId, string PlanName);
@@ -78,7 +80,8 @@ public class PlanLimitService(AppDbContext dbContext) : IPlanLimitService
         await CountAsync(companyId, PlanLimit.ActiveCycles, null, null, cancellationToken),
         await CountAsync(companyId, PlanLimit.CyclesPerYear, DateTime.UtcNow.Year, null, cancellationToken),
         await CountAsync(companyId, PlanLimit.CustomTemplates, null, null, cancellationToken),
-        await CountAsync(companyId, PlanLimit.Departments, null, null, cancellationToken));
+        await CountAsync(companyId, PlanLimit.Departments, null, null, cancellationToken),
+        await CountAsync(companyId, PlanLimit.AiAnalysesPerMonth, null, null, cancellationToken));
 
     public async Task<IResult?> CheckAsync(int companyId, PlanLimit limit, CancellationToken cancellationToken,
         int adding = 1, int? year = null, int? excludeCycleId = null)
@@ -135,6 +138,7 @@ public class PlanLimitService(AppDbContext dbContext) : IPlanLimitService
         PlanLimit.CyclesPerYear => plan.MaxCyclesPerYear,
         PlanLimit.CustomTemplates => plan.MaxCustomTemplates,
         PlanLimit.Departments => plan.MaxDepartments,
+        PlanLimit.AiAnalysesPerMonth => plan.HasAiFeatures ? plan.MaxAiAnalysesPerMonth : 0,
         _ => null,
     };
 
@@ -150,8 +154,17 @@ public class PlanLimitService(AppDbContext dbContext) : IPlanLimitService
             PlanLimit.CyclesPerYear => cycles.CountAsync(c => c.FechaInicio.Year == (year ?? DateTime.UtcNow.Year), cancellationToken),
             PlanLimit.CustomTemplates => dbContext.Templates.CountAsync(t => t.EmpresaID == companyId && !t.IsDefault, cancellationToken),
             PlanLimit.Departments => dbContext.Departments.CountAsync(d => d.EmpresaID == companyId, cancellationToken),
+            // Failed analyses don't consume the quota.
+            PlanLimit.AiAnalysesPerMonth => dbContext.AiEvaluationAnalyses.CountAsync(a => a.EmpresaID == companyId
+                && a.Estado != AiAnalysisStatus.Error && a.FechaCreacion >= StartOfMonthUtc(), cancellationToken),
             _ => Task.FromResult(0),
         };
+    }
+
+    private static DateTime StartOfMonthUtc()
+    {
+        var now = DateTime.UtcNow;
+        return new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
     }
 
     private static string MessageFor(PlanLimit limit, int max, string planName)
@@ -163,6 +176,7 @@ public class PlanLimitService(AppDbContext dbContext) : IPlanLimitService
             PlanLimit.CyclesPerYear => $"{max} ciclos de evaluación por año",
             PlanLimit.CustomTemplates => $"{max} plantillas propias",
             PlanLimit.Departments => $"{max} departamentos",
+            PlanLimit.AiAnalysesPerMonth => $"{max} análisis con IA al mes",
             _ => "este recurso",
         };
         return $"Tu plan {planName} permite hasta {what}. Mejora tu plan para añadir más.";

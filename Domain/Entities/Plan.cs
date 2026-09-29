@@ -31,6 +31,9 @@ public class Plan
 
     public int? MaxDepartments { get; set; }
 
-    /// <summary>Access to the (upcoming) AI features.</summary>
+    /// <summary>Access to the AI features (AI evaluation analysis).</summary>
     public bool HasAiFeatures { get; set; }
+
+    /// <summary>AI analyses the company can request per calendar month.</summary>
+    public int? MaxAiAnalysesPerMonth { get; set; }
 }

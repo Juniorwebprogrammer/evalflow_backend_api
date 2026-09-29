@@ -1,3 +1,4 @@
+using evalflow_backend_api.Infrastructure.AI;
 using evalflow_backend_api.Infrastructure.Plans;
 using System.Text;
 using evalflow_backend_api.Infrastructure.BackgroundJobs;
@@ -9,6 +10,7 @@ using evalflow_backend_api.Infrastructure.Security.Encryption;
 using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Options;
 using QuestPDF.Infrastructure;
 
 namespace evalflow_backend_api.Core.Extensions;
@@ -93,9 +95,22 @@ public static class DependencyInjectionExtensions
             .Validate(s => Uri.TryCreate(s.BaseUrl, UriKind.Absolute, out _), "Falta o no es válida la URL del frontend en la configuración (Frontend:BaseUrl).")
             .ValidateOnStart();
 
+        services.AddOptions<AiSettings>()
+            .Bind(configuration.GetSection(AiSettings.SectionName))
+            .Validate(s => s.IsValid(), "Con Ai:Enabled = true hacen falta Ai:ApiKey, Ai:Model y una Ai:BaseUrl válida.")
+            .ValidateOnStart();
+        services.AddSingleton<AiAnalysisQueueSignal>();
+        services.AddHttpClient<ILlmClient, OpenAiCompatibleLlmClient>((sp, client) =>
+        {
+            var ai = sp.GetRequiredService<IOptions<AiSettings>>().Value;
+            client.BaseAddress = new Uri(ai.BaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(ai.TimeoutSeconds);
+        });
+
         services.AddHttpContextAccessor();
         services.AddHostedService<EvaluationReminderJob>();
         services.AddHostedService<EmailQueueWorker>();
+        services.AddHostedService<AiAnalysisWorker>();
         
         return services;
     }

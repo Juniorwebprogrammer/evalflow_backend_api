@@ -19,18 +19,21 @@ public static class PlanCatalog
             Id = Starter, Code = "starter", Nombre = "Starter",
             MaxEmployees = 25, MaxActiveCycles = 1, MaxCyclesPerYear = 4,
             MaxCustomTemplates = 10, MaxDepartments = 5, HasAiFeatures = false,
+            MaxAiAnalysesPerMonth = 0,
         },
         new()
         {
             Id = Growth, Code = "growth", Nombre = "Growth",
             MaxEmployees = 100, MaxActiveCycles = 3, MaxCyclesPerYear = 12,
             MaxCustomTemplates = 50, MaxDepartments = 20, HasAiFeatures = true,
+            MaxAiAnalysesPerMonth = 30,
         },
         new()
         {
             Id = Enterprise, Code = "enterprise", Nombre = "Enterprise",
             MaxEmployees = null, MaxActiveCycles = null, MaxCyclesPerYear = null,
             MaxCustomTemplates = null, MaxDepartments = null, HasAiFeatures = true,
+            MaxAiAnalysesPerMonth = 150,
         },
     ];
 

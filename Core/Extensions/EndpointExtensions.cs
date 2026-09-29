@@ -1,4 +1,6 @@
 using evalflow_backend_api.Infrastructure.SignalR;
+using evalflow_backend_api.Features.AiAnalysis.GetCycleAiAnalyses;
+using evalflow_backend_api.Features.AiAnalysis.RequestAiAnalysis;
 using evalflow_backend_api.Features.Auth.ForgotPassword;
 using evalflow_backend_api.Features.Auth.GetMyFeatures;
 using evalflow_backend_api.Features.Auth.Login;
@@ -184,6 +186,10 @@ public static class EndpointExtensions
         app.MapGetCycleClarifications();
         app.MapGetMyClarifications();
         app.MapRespondClarification();
+
+        // AI Analysis
+        app.MapRequestAiAnalysis();
+        app.MapGetCycleAiAnalyses();
 
         // Dashboard
         app.MapGetDashboardStats();

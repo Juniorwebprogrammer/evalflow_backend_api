@@ -37,7 +37,8 @@ public class GetCompanyPlanHandler(AppDbContext dbContext, ICurrentUserService c
 
         return Results.Ok(new CompanyPlanDto(
             PlanDto.From(plan),
-            new PlanUsageDto(usage.Employees, usage.ActiveCycles, usage.CyclesThisYear, usage.CustomTemplates, usage.Departments)));
+            new PlanUsageDto(usage.Employees, usage.ActiveCycles, usage.CyclesThisYear, usage.CustomTemplates, usage.Departments,
+                usage.AiAnalysesThisMonth)));
     }
 }
 
