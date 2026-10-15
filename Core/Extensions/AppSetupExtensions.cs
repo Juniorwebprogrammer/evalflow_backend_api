@@ -10,7 +10,8 @@ public static class AppSetupExtensions
     {
         services.AddOpenApi();
 
-        var connectionString = config.GetConnectionString("DefaultConnection");
+        // Also accepts a postgresql:// URL (as Neon gives it).
+        var connectionString = PostgresConnectionString.Normalize(config.GetConnectionString("DefaultConnection"));
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(connectionString));
 

@@ -109,16 +109,26 @@ public static class CreateAdministratorCli
         }
 
         using var scope = services.CreateScope();
-        var command = new CreateAdministratorCommand(scope.ServiceProvider.GetRequiredService<AppDbContext>());
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var command = new CreateAdministratorCommand(dbContext);
         try
         {
+            // The backend applies migrations when it starts: until the new one is deployed, the tables aren't ready.
+            var pending = (await dbContext.Database.GetPendingMigrationsAsync()).ToList();
+            if (pending.Count > 0)
+            {
+                Console.Error.WriteLine($"The database isn't migrated yet ({string.Join(", ", pending)} pending). " +
+                                        "Deploy the backend first (it migrates when it starts), then run this again.");
+                return 3;
+            }
+
             var result = await command.ExecuteAsync(args[1], args[2], string.Join(' ', args[3..]), CancellationToken.None);
             (result.Ok ? Console.Out : Console.Error).WriteLine(result.Message);
             return result.Ok ? 0 : 1;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException or Npgsql.NpgsqlException)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or DbUpdateException or Npgsql.NpgsqlException)
         {
-            // Usually the database isn't reachable (ConnectionStrings__DefaultConnection) or isn't migrated yet.
+            // Usually ConnectionStrings__DefaultConnection is wrong or the database isn't reachable.
             Console.Error.WriteLine($"Couldn't create the administrator: {(ex.InnerException ?? ex).Message}");
             return 2;
         }

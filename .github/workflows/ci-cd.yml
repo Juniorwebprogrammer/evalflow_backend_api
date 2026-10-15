@@ -81,6 +81,9 @@ jobs:
             -e ApiKey="ci-api-key" \
             -e Encryption__Key="ci-only-encryption-key-32-bytes!" \
             -e Frontend__BaseUrl="http://localhost:3000" \
+            -e Vexxen__BaseUrl="http://localhost:3000" \
+            -e Vexxen__ClientId="ci-client" \
+            -e Vexxen__ApiKey="ci-only-vexxen-api-key" \
             evalflow-backend-api:ci
 
           # Esperamos a que la API responda en GET / (hasta ~60 s).
