@@ -13,11 +13,16 @@ public class User
     [MaxLength(40)]
     public required string Apellidos { get; set; }
 
+    /// <summary>Copied from the Vexxen account on every sign-in (Vexxen owns the email and the password).</summary>
     [MaxLength(60)]
     public required string Email { get; set; }
-    
-    [MaxLength(255)]
-    public required string PasswordHash { get; set; }
+
+    /// <summary>
+    /// The Vexxen account this user signs in with. Null while an invitation is pending: it gets linked the first
+    /// time the invited person signs in with Vexxen using the invited email.
+    /// </summary>
+    [MaxLength(64)]
+    public string? VexxenUserId { get; set; }
     
     public int EmpresaID { get; set; }
     
@@ -41,25 +46,9 @@ public class User
 
     public ICollection<EvaluationSubmission> EvaluacionesRealizadas { get; set; } = new List<EvaluationSubmission>();
     
-    public bool EmailVerificado { get; set; } = false;
-    
-    public string? TokenValidacionEmail { get; set; }
-
-    public bool TwoFactorEnabled { get; set; } = false;
-    
-    public string? TwoFactorCode { get; set; }
-    
+    /// <summary>Pending invitation (link in the email). Cleared when the invited person signs in for the first time.</summary>
     public string? TokenInvitacion { get; set; }
-    
-    [MaxLength(255)]
-    public string? TokenRecuperacionPassword { get; set; }
-    
-    public DateTime? ExpiracionTokenRecuperacion { get; set; }
-    
-    public DateTime? TokenValidacionExpiracion { get; set; }
-    
-    public DateTime? TwoFactorCodeExpiration { get; set; }
-    
+
     public DateTime? TokenInvitacionExpiracion { get; set; }
     
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;

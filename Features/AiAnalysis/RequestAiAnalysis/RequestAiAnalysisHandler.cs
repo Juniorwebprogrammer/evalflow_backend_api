@@ -44,7 +44,7 @@ public class RequestAiAnalysisHandler(
         {
             return Results.Json(
                 new PlanFeatureError(FeatureNotAvailableCode,
-                    "El análisis con IA está disponible en los planes Growth y Enterprise. Mejora tu plan para usarlo.", "Ai"),
+                    "El análisis con IA está disponible en los planes Professional y Enterprise. Mejora tu plan para usarlo.", "Ai"),
                 statusCode: StatusCodes.Status403Forbidden);
         }
 

@@ -4,12 +4,14 @@ namespace evalflow_backend_api.Domain.Constants;
 
 /// <summary>
 /// The plans EvalFlow sells. Seeds the <c>Plans</c> table and is the fallback
-/// when a plan row is missing, so limits are never silently lifted.
+/// when a plan row is missing, so limits are never silently lifted. Companies
+/// buy them in the Vexxen catalog (product "evaluation-flow"); the codes match
+/// the Vexxen plan ids, see <see cref="FromVexxenPlanId"/>.
 /// </summary>
 public static class PlanCatalog
 {
     public const int Starter = 1;
-    public const int Growth = 2;
+    public const int Professional = 2;
     public const int Enterprise = 3;
 
     public static readonly IReadOnlyList<Plan> All =
@@ -23,7 +25,7 @@ public static class PlanCatalog
         },
         new()
         {
-            Id = Growth, Code = "growth", Nombre = "Growth",
+            Id = Professional, Code = "professional", Nombre = "Professional",
             MaxEmployees = 100, MaxActiveCycles = 3, MaxCyclesPerYear = 12,
             MaxCustomTemplates = 50, MaxDepartments = 20, HasAiFeatures = true,
             MaxAiAnalysesPerMonth = 30,
@@ -38,6 +40,10 @@ public static class PlanCatalog
     ];
 
     public static bool Exists(int planId) => All.Any(p => p.Id == planId);
+
+    /// <summary>The plan for a Vexxen catalog plan id ("starter", "professional", "enterprise"), or null if EvalFlow doesn't sell it.</summary>
+    public static int? FromVexxenPlanId(string? vexxenPlanId) =>
+        All.FirstOrDefault(p => string.Equals(p.Code, vexxenPlanId, StringComparison.OrdinalIgnoreCase))?.Id;
 
     /// <summary>The catalog entry for <paramref name="planId"/>, or Starter (the most restrictive) when unknown.</summary>
     public static Plan Get(int planId) => All.FirstOrDefault(p => p.Id == planId) ?? All[0];

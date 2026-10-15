@@ -59,7 +59,7 @@ public class GetProfileInformationHandlerTests
     {
         await using var db = InMemoryDbContextFactory.Create();
         var company = TestDataFactory.CreateCompany(identificationId: "tenant-1", nombre: "Acme Corp");
-        var user = TestDataFactory.CreateUser(company, email: "user@example.com", twoFactorEnabled: true);
+        var user = TestDataFactory.CreateUser(company, email: "user@example.com");
         db.Companies.Add(company);
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -77,6 +77,5 @@ public class GetProfileInformationHandlerTests
         ok.Value.Rol.Should().Be(user.Rol);
         ok.Value.NombreEmpresa.Should().Be("Acme Corp");
         ok.Value.IdentificationId.Should().Be("tenant-1");
-        ok.Value.TwoFactorAuthentication.Should().BeTrue();
     }
 }

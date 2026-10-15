@@ -17,7 +17,7 @@ public class DeleteAccountEndpointTests : IntegrationTestBase
     {
         var client = CreateClient(includeApiKey: false);
 
-        var response = await client.SendAsync(BuildDeleteRequest(new DeleteAccountRecord("password")));
+        var response = await client.SendAsync(BuildDeleteRequest(new DeleteAccountRecord("owner@example.com")));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -25,16 +25,16 @@ public class DeleteAccountEndpointTests : IntegrationTestBase
     [Fact]
     public async Task Delete_Account_WithoutJwt_ReturnsUnauthorized()
     {
-        var response = await Client.SendAsync(BuildDeleteRequest(new DeleteAccountRecord("password")));
+        var response = await Client.SendAsync(BuildDeleteRequest(new DeleteAccountRecord("owner@example.com")));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
-    public async Task Delete_Account_WithValidJwtAndCorrectPassword_DeletesUser()
+    public async Task Delete_Account_WithValidJwtAndTheAccountEmail_DeletesUser()
     {
         var company = TestDataFactory.CreateCompany(identificationId: "tenant-1");
-        var user = TestDataFactory.CreateUser(company, email: "owner@example.com", passwordHash: BCrypt.Net.BCrypt.HashPassword("correct-password"));
+        var user = TestDataFactory.CreateUser(company, email: "owner@example.com");
 
         await using (var db = Factory.CreateDbContext())
         {
@@ -45,7 +45,7 @@ public class DeleteAccountEndpointTests : IntegrationTestBase
 
         var client = CreateAuthenticatedClient(user, company);
 
-        var response = await client.SendAsync(BuildDeleteRequest(new DeleteAccountRecord("correct-password")));
+        var response = await client.SendAsync(BuildDeleteRequest(new DeleteAccountRecord("owner@example.com")));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -54,10 +54,10 @@ public class DeleteAccountEndpointTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task Delete_Account_WithWrongPassword_ReturnsBadRequest()
+    public async Task Delete_Account_WithAnotherEmail_ReturnsBadRequest()
     {
         var company = TestDataFactory.CreateCompany(identificationId: "tenant-1");
-        var user = TestDataFactory.CreateUser(company, email: "owner2@example.com", passwordHash: BCrypt.Net.BCrypt.HashPassword("correct-password"));
+        var user = TestDataFactory.CreateUser(company, email: "owner2@example.com");
 
         await using (var db = Factory.CreateDbContext())
         {
@@ -68,7 +68,7 @@ public class DeleteAccountEndpointTests : IntegrationTestBase
 
         var client = CreateAuthenticatedClient(user, company);
 
-        var response = await client.SendAsync(BuildDeleteRequest(new DeleteAccountRecord("wrong-password")));
+        var response = await client.SendAsync(BuildDeleteRequest(new DeleteAccountRecord("someone@example.com")));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }

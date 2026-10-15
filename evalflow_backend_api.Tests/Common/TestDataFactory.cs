@@ -12,33 +12,33 @@ public static class TestDataFactory
     public static Company CreateCompany(
         string? identificationId = null,
         string nombre = "Acme Corp",
-        int planId = 1) => new()
+        int planId = 1,
+        string planStatus = PlanStatuses.Active,
+        string? billingVexxenUserId = null) => new()
     {
         Nombre = nombre,
         Colors = "#000000",
         IdentificationId = identificationId ?? $"tenant-{Guid.NewGuid():N}",
         PlanId = planId,
+        PlanStatus = planStatus,
+        BillingVexxenUserId = billingVexxenUserId,
         Cif = "B12345678",
     };
 
     public static User CreateUser(
         Company company,
         string? email = null,
-        string passwordHash = "hashed-password",
         string rol = AppRoles.Employee,
-        bool emailVerificado = true,
         bool activo = true,
-        bool twoFactorEnabled = false) => new()
+        string? vexxenUserId = null) => new()
     {
         Nombre = "Test",
         Apellidos = "User",
         Email = email ?? $"user-{Guid.NewGuid():N}@example.com",
-        PasswordHash = passwordHash,
+        VexxenUserId = vexxenUserId ?? $"vx-{Guid.NewGuid():N}",
         EmpresaID = company.Id,
         Empresa = company,
         Rol = rol,
-        EmailVerificado = emailVerificado,
         Activo = activo,
-        TwoFactorEnabled = twoFactorEnabled,
     };
 }

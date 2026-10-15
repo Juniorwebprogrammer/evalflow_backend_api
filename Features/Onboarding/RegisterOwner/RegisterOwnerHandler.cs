@@ -1,134 +1,118 @@
 using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Domain.Entities;
+using evalflow_backend_api.Features.Auth.Vexxen;
 using evalflow_backend_api.Infrastructure.Database;
-using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Infrastructure.Database.Seeders;
 using evalflow_backend_api.Infrastructure.Jwt;
-using evalflow_backend_api.Infrastructure.Notifications;
-using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
+using evalflow_backend_api.Infrastructure.Plans;
+using evalflow_backend_api.Infrastructure.Vexxen;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace evalflow_backend_api.Features.Onboarding.RegisterOwner;
 
-public class RegisterOwnerHandler(AppDbContext dbContext, IJwtProvider interfaceJwtProvider, IPasswordHasser interfacePasswordHasser, IEmailService emailService, IOptions<FrontendSettings> frontendSettings) : IRequestHandler<RegisterOwnerRecord, IResult>
+public class RegisterOwnerHandler(AppDbContext dbContext, IJwtProvider jwtProvider, IVexxenClient vexxen, IOptions<VexxenSettings> vexxenSettings)
+    : IRequestHandler<RegisterOwnerRecord, IResult>
 {
     public async Task<IResult> Handle(RegisterOwnerRecord request, CancellationToken cancellationToken)
     {
-        var validationError = await ValidateRequestAsync(request, cancellationToken);
-        if (validationError is not null) return validationError;
-        
-        var (newUser, newCompany) = CreateEntities(request);
+        if (string.IsNullOrWhiteSpace(request.CompanyNombre))
+            return Results.BadRequest(new { Message = "El nombre de la empresa es obligatorio." });
+        if (string.IsNullOrWhiteSpace(request.VexxenAccessToken)) return VexxenErrors.InvalidSession();
 
-        await SaveToDatabaseAsync(newUser, cancellationToken);
+        VexxenUser vexxenUser;
+        VexxenAccess access;
+        try
+        {
+            vexxenUser = await vexxen.GetUserInfoAsync(request.VexxenAccessToken, cancellationToken);
+            access = await vexxen.GetAccessAsync(vexxenUser.Id, cancellationToken);
+        }
+        catch (VexxenUnauthorizedException)
+        {
+            return VexxenErrors.InvalidSession();
+        }
+        catch (VexxenException)
+        {
+            return VexxenErrors.Unavailable();
+        }
+
+        var conflict = await CheckConflictsAsync(vexxenUser, cancellationToken);
+        if (conflict is not null) return conflict;
+
+        if (!access.Access || !PlanStatuses.HasAccess(access.Status) || PlanCatalog.FromVexxenPlanId(access.Plan?.Id) is null)
+        {
+            return Results.Json(new
+            {
+                Code = "NO_PLAN",
+                Message = "Para crear tu empresa necesitas un plan de EvalFlow. Elige uno en Vexxen (incluye 14 días de prueba).",
+                vexxenSettings.Value.CatalogUrl,
+            }, statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var (owner, company) = CreateEntities(request, vexxenUser, access);
+        dbContext.Users.Add(owner);
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         // Provisiona las plantillas por defecto (180°, 360° y autoevaluación) para el nuevo Tenant.
-        await DefaultTemplatesSeeder.SeedForCompanyAsync(dbContext, newCompany.Id, cancellationToken);
+        await DefaultTemplatesSeeder.SeedForCompanyAsync(dbContext, company.Id, cancellationToken);
 
-        var (jwt, refreshToken) = GenerateTokens(newUser, newCompany);
-
-        if (newUser.TokenValidacionEmail == null) return GenerateSuccessResponse(newUser, jwt, refreshToken);
-        var emailBody = await GenerateWelcomeEmailHtmlAsync(request.UserNombre, request.CompanyNombre, newUser.TokenValidacionEmail);
-
-        await emailService.SendEmailAsync(
-            request.Email,
-            "Verifica tu cuenta en Evalflow",
-            emailBody,
-            cancellationToken
-        );
-
-        return GenerateSuccessResponse(newUser, jwt, refreshToken);
+        return Results.Ok(new RegisterOwnerResponse(
+            Message: "Usuario y Empresa creados con éxito.",
+            UserNombre: owner.Nombre,
+            Jwt: jwtProvider.GenerateJwt(owner, company),
+            IdentificationId: company.IdentificationId,
+            PlanId: company.PlanId,
+            PlanStatus: company.PlanStatus));
     }
 
-    private async Task<IResult?> ValidateRequestAsync(RegisterOwnerRecord request, CancellationToken cancellationToken)
+    // One company per person (the email is unique across EvalFlow) and one company per Vexxen subscription.
+    private async Task<IResult?> CheckConflictsAsync(VexxenUser vexxenUser, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains("@"))
-            return Results.BadRequest("El email no es válido.");
-        
-        if (!PlanCatalog.Exists(request.PlanId))
-            return Results.BadRequest(new { Message = "El plan seleccionado no es válido." });
+        var email = vexxenUser.Email.Trim().ToLowerInvariant();
+        if (await dbContext.Users.AnyAsync(u => u.VexxenUserId == vexxenUser.Id || u.Email.ToLower() == email, cancellationToken))
+        {
+            return VexxenErrors.Error(StatusCodes.Status409Conflict, "ALREADY_MEMBER",
+                "Tu cuenta ya pertenece a una empresa en EvalFlow (o tienes una invitación pendiente): inicia sesión.");
+        }
 
-        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 6)
-            return Results.BadRequest("La contraseña debe tener al menos 6 caracteres.");
-        
-        var emailExists = await dbContext.Users.AnyAsync(u => u.Email == request.Email, cancellationToken);
-        if (emailExists)
-            return Results.Conflict("Ya existe un usuario registrado con este correo electrónico.");
+        if (await dbContext.Companies.AnyAsync(c => c.BillingVexxenUserId == vexxenUser.Id, cancellationToken))
+        {
+            return VexxenErrors.Error(StatusCodes.Status409Conflict, "SUBSCRIPTION_IN_USE", "Tu suscripción de EvalFlow ya está asociada a otra empresa.");
+        }
 
         return null;
     }
-    
-    private (User, Company) CreateEntities(RegisterOwnerRecord request)
+
+    private static (User, Company) CreateEntities(RegisterOwnerRecord request, VexxenUser vexxenUser, VexxenAccess access)
     {
         var company = new Company
         {
-            Nombre = request.CompanyNombre.ToLower(),
+            Nombre = request.CompanyNombre.Trim().ToLower(),
             Colors = request.CompanyColors,
-            PlanId = request.PlanId,
+            PlanId = PlanCatalog.Starter,
+            BillingVexxenUserId = vexxenUser.Id,
             IdentificationId = Guid.NewGuid().ToString("N"),
             Cif = request.Cif,
             DireccionFiscal = request.DireccionFiscal,
             Sector = request.Sector,
             FechaCreacion = DateTime.UtcNow
         };
-        
-        var user = new User
+        PlanSync.Apply(company, access, DateTime.UtcNow);
+
+        var owner = new User
         {
-            Nombre = request.UserNombre,
-            Apellidos = request.Apellidos,
-            Email = request.Email,
-            PasswordHash = interfacePasswordHasser.Hash(request.Password), 
-            Empresa = company, 
+            Nombre = Truncate(vexxenUser.FirstName, 40),
+            Apellidos = Truncate(vexxenUser.LastName, 40),
+            Email = vexxenUser.Email.Trim().ToLowerInvariant(),
+            VexxenUserId = vexxenUser.Id,
+            Empresa = company,
             Rol = AppRoles.Owner,
             FechaCreacion = DateTime.UtcNow,
-            EmailVerificado = false,
-            TokenValidacionEmail = Guid.NewGuid().ToString("N"),
-            TokenValidacionExpiracion = DateTime.UtcNow.AddHours(24)
         };
 
-        return (user, company);
+        return (owner, company);
     }
 
-    private async Task SaveToDatabaseAsync(User user, CancellationToken cancellationToken)
-    {
-        dbContext.Users.Add(user);
-        
-        await dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    private (string Jwt, string RefreshToken) GenerateTokens(User user, Company company)
-    {
-        var jwt = interfaceJwtProvider.GenerateJwt(user, company);
-        
-        var refreshToken = interfaceJwtProvider.GenerateRefreshToken();
-        
-        return (jwt, refreshToken);
-    }
-
-    private async Task<string> GenerateWelcomeEmailHtmlAsync(string userNombre, string companyNombre, string token)
-    {
-        var templatePath = Path.Combine(Directory.GetCurrentDirectory(), "Infrastructure", "Notifications", "Templates", "WelcomeEmail.html");
-        var template = await File.ReadAllTextAsync(templatePath);
-        var validationLink = frontendSettings.Value.BuildLink($"auth/verify-email?token={token}");
-        var currentYear = DateTime.UtcNow.Year.ToString();
-        
-        return template
-            .Replace("{{UserNombre}}", userNombre)
-            .Replace("{{CompanyNombre}}", companyNombre)
-            .Replace("{{ValidationLink}}", validationLink)
-            .Replace("{{Year}}", currentYear);
-    }
-    
-    private IResult GenerateSuccessResponse(User user, string jwt, string refreshToken)
-    {
-        var responsePayload = new RegisterOwnerResponse(
-            Message: "Usuario y Empresa creados con éxito.",
-            UserNombre: user.Nombre,
-            Jwt: jwt,
-            RefreshToken: refreshToken
-        );
-        
-        return Results.Ok(responsePayload);
-    }
+    private static string Truncate(string value, int max) => value.Length > max ? value[..max] : value;
 }

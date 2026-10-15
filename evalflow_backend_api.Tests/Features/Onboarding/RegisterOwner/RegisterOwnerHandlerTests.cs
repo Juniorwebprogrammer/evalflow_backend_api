@@ -1,138 +1,156 @@
-using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Features.Onboarding.RegisterOwner;
+using evalflow_backend_api.Infrastructure.Database;
 using evalflow_backend_api.Infrastructure.Jwt;
-using evalflow_backend_api.Infrastructure.Notifications;
-using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
+using evalflow_backend_api.Infrastructure.Vexxen;
 using evalflow_backend_api.Tests.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
-using Moq;
 using Microsoft.Extensions.Options;
+using Moq;
 
 namespace evalflow_backend_api.Tests.Features.Onboarding.RegisterOwner;
 
 public class RegisterOwnerHandlerTests
 {
     private readonly Mock<IJwtProvider> _jwtProvider = new();
-    private readonly Mock<IPasswordHasser> _passwordHasher = new();
-    private readonly Mock<IEmailService> _emailService = new();
+    private readonly FakeVexxenClient _vexxen = new();
 
-    private RegisterOwnerHandler CreateSut(evalflow_backend_api.Infrastructure.Database.AppDbContext dbContext) =>
-        new(dbContext, _jwtProvider.Object, _passwordHasher.Object, _emailService.Object, Options.Create(new FrontendSettings { BaseUrl = "http://frontend.test" }));
+    public RegisterOwnerHandlerTests()
+    {
+        _jwtProvider.Setup(j => j.GenerateJwt(It.IsAny<User>(), It.IsAny<Company>())).Returns("fake-jwt");
+    }
 
-    private static RegisterOwnerRecord ValidRequest(string email = "owner@example.com") => new(
-        UserNombre: "Ada",
-        Apellidos: "Lovelace",
-        Email: email,
-        Password: "SecurePass1",
+    private RegisterOwnerHandler CreateSut(AppDbContext dbContext) =>
+        new(dbContext, _jwtProvider.Object, _vexxen,
+            Options.Create(new VexxenSettings { BaseUrl = "http://vexxen.test", ClientId = "c", ApiKey = "k" }));
+
+    private static RegisterOwnerRecord Request(string accessToken) => new(
+        VexxenAccessToken: accessToken,
         CompanyNombre: "Acme Corp",
         CompanyColors: "#FFFFFF",
-        PlanId: 1,
         Cif: "B12345678",
         DireccionFiscal: "Calle Falsa 123",
-        Sector: "Tech"
-    );
+        Sector: "Tech");
+
+    private string Owner(string? planId = "professional", string status = "trialing") =>
+        _vexxen.AddUser(FakeVexxenClient.User("vx-ada", "Ada@Example.com"), planId, status);
 
     [Fact]
-    public async Task Handle_WithInvalidEmail_ReturnsBadRequest()
+    public async Task Handle_WithAPlanInVexxen_CreatesTheCompanyWithThatPlanAndTheOwnerFromVexxen()
     {
         await using var db = InMemoryDbContextFactory.Create();
-        var sut = CreateSut(db);
+        var trialEnds = DateTime.UtcNow.AddDays(14);
+        var token = Owner();
+        _vexxen.SetPlan("vx-ada", "professional", "trialing", trialEndsAt: trialEnds);
 
-        var result = await sut.Handle(ValidRequest(email: "not-an-email"), CancellationToken.None);
-
-        result.Should().HaveStatusCode(StatusCodes.Status400BadRequest);
-        (await db.Users.CountAsync()).Should().Be(0);
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(4)]
-    public async Task Handle_WithUnknownPlan_ReturnsBadRequest(int planId)
-    {
-        await using var db = InMemoryDbContextFactory.Create();
-        var sut = CreateSut(db);
-
-        var result = await sut.Handle(ValidRequest() with { PlanId = planId }, CancellationToken.None);
-
-        result.Should().HaveStatusCode(StatusCodes.Status400BadRequest);
-        (await db.Companies.CountAsync()).Should().Be(0);
-    }
-
-    [Fact]
-    public async Task Handle_WithShortPassword_ReturnsBadRequest()
-    {
-        await using var db = InMemoryDbContextFactory.Create();
-        var sut = CreateSut(db);
-
-        var request = ValidRequest() with { Password = "123" };
-
-        var result = await sut.Handle(request, CancellationToken.None);
-
-        result.Should().HaveStatusCode(StatusCodes.Status400BadRequest);
-        (await db.Users.CountAsync()).Should().Be(0);
-    }
-
-    [Fact]
-    public async Task Handle_WithExistingEmail_ReturnsConflict()
-    {
-        await using var db = InMemoryDbContextFactory.Create();
-        var company = TestDataFactory.CreateCompany();
-        var existingUser = TestDataFactory.CreateUser(company, email: "owner@example.com");
-        db.Companies.Add(company);
-        db.Users.Add(existingUser);
-        await db.SaveChangesAsync();
-
-        var sut = CreateSut(db);
-
-        var result = await sut.Handle(ValidRequest(email: "owner@example.com"), CancellationToken.None);
-
-        result.Should().HaveStatusCode(StatusCodes.Status409Conflict);
-    }
-
-    [Fact]
-    public async Task Handle_WithValidRequest_CreatesCompanyAndOwnerAndSendsWelcomeEmail()
-    {
-        await using var db = InMemoryDbContextFactory.Create();
-        _jwtProvider.Setup(j => j.GenerateJwt(It.IsAny<User>(), It.IsAny<Company>())).Returns("fake-jwt");
-        _jwtProvider.Setup(j => j.GenerateRefreshToken()).Returns("fake-refresh-token");
-        _passwordHasher.Setup(p => p.Hash("SecurePass1")).Returns("hashed-password");
-
-        var sut = CreateSut(db);
-
-        var result = await sut.Handle(ValidRequest(), CancellationToken.None);
+        var result = await CreateSut(db).Handle(Request(token), CancellationToken.None);
 
         var ok = result.Should().BeOfType<Ok<RegisterOwnerResponse>>().Subject;
         ok.Value!.Jwt.Should().Be("fake-jwt");
-        ok.Value.RefreshToken.Should().Be("fake-refresh-token");
-        ok.Value.UserNombre.Should().Be("Ada");
+        ok.Value.PlanId.Should().Be(PlanCatalog.Professional);
+        ok.Value.PlanStatus.Should().Be(PlanStatuses.Trialing);
 
-        var createdUser = await db.Users.Include(u => u.Empresa).SingleAsync();
-        createdUser.Email.Should().Be("owner@example.com");
-        createdUser.PasswordHash.Should().Be("hashed-password");
-        createdUser.Rol.Should().Be(AppRoles.Owner);
-        createdUser.Empresa!.Nombre.Should().Be("acme corp");
-        createdUser.TokenValidacionEmail.Should().NotBeNullOrEmpty();
+        var owner = await db.Users.Include(u => u.Empresa).SingleAsync();
+        owner.VexxenUserId.Should().Be("vx-ada");
+        owner.Email.Should().Be("ada@example.com");
+        owner.Nombre.Should().Be("Ada");
+        owner.Apellidos.Should().Be("Lovelace");
+        owner.Rol.Should().Be(AppRoles.Owner);
+        owner.Empresa!.Nombre.Should().Be("acme corp");
+        owner.Empresa.BillingVexxenUserId.Should().Be("vx-ada");
+        owner.Empresa.PlanId.Should().Be(PlanCatalog.Professional);
+        owner.Empresa.TrialEndsAt.Should().BeCloseTo(trialEnds, TimeSpan.FromSeconds(1));
+        owner.Empresa.PlanSyncedAt.Should().NotBeNull();
+    }
 
-        _emailService.Verify(e => e.SendEmailAsync("owner@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    [Theory]
+    [InlineData(null, "none")]
+    [InlineData("starter", "none")]
+    [InlineData("pro", "active")]
+    public async Task Handle_WithoutAnEvalFlowPlan_ReturnsNoPlanWithTheCatalogAndCreatesNothing(string? planId, string status)
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+        var token = Owner(planId, status);
+
+        var result = await CreateSut(db).Handle(Request(token), CancellationToken.None);
+
+        result.Should().HaveStatusCode(StatusCodes.Status409Conflict);
+        var body = System.Text.Json.JsonSerializer.Serialize(((IValueHttpResult)result).Value);
+        body.Should().Contain("NO_PLAN").And.Contain("http://vexxen.test/dashboard/catalog?product=evaluation-flow");
+        (await db.Companies.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_WhenTheEmailIsAlreadyInEvalFlow_ReturnsConflict()
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+        var company = TestDataFactory.CreateCompany();
+        db.Users.Add(TestDataFactory.CreateUser(company, email: "ada@example.com", vexxenUserId: null));
+        await db.SaveChangesAsync();
+
+        var result = await CreateSut(db).Handle(Request(Owner()), CancellationToken.None);
+
+        result.Should().HaveStatusCode(StatusCodes.Status409Conflict);
+        (await db.Companies.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_WhenTheSubscriptionAlreadyPaysForAnotherCompany_ReturnsConflict()
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+        db.Companies.Add(TestDataFactory.CreateCompany(billingVexxenUserId: "vx-ada"));
+        await db.SaveChangesAsync();
+
+        var result = await CreateSut(db).Handle(Request(Owner()), CancellationToken.None);
+
+        result.Should().HaveStatusCode(StatusCodes.Status409Conflict);
+        (await db.Companies.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_WithAnInvalidVexxenToken_ReturnsUnauthorized()
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+
+        var result = await CreateSut(db).Handle(Request("not-a-token"), CancellationToken.None);
+
+        result.Should().HaveStatusCode(StatusCodes.Status401Unauthorized);
+    }
+
+    [Fact]
+    public async Task Handle_WhenVexxenIsDown_ReturnsServiceUnavailable()
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+        var token = Owner();
+        _vexxen.Down = true;
+
+        var result = await CreateSut(db).Handle(Request(token), CancellationToken.None);
+
+        result.Should().HaveStatusCode(StatusCodes.Status503ServiceUnavailable);
+        (await db.Companies.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_WithoutACompanyName_ReturnsBadRequest()
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+
+        var result = await CreateSut(db).Handle(Request(Owner()) with { CompanyNombre = " " }, CancellationToken.None);
+
+        result.Should().HaveStatusCode(StatusCodes.Status400BadRequest);
     }
 
     [Fact]
     public async Task Handle_WithValidRequest_SeedsDefaultTemplatesForTheNewCompany()
     {
         await using var db = InMemoryDbContextFactory.Create();
-        _jwtProvider.Setup(j => j.GenerateJwt(It.IsAny<User>(), It.IsAny<Company>())).Returns("fake-jwt");
-        _jwtProvider.Setup(j => j.GenerateRefreshToken()).Returns("fake-refresh-token");
-        _passwordHasher.Setup(p => p.Hash("SecurePass1")).Returns("hashed-password");
 
-        var sut = CreateSut(db);
+        await CreateSut(db).Handle(Request(Owner()), CancellationToken.None);
 
-        await sut.Handle(ValidRequest(), CancellationToken.None);
-
-        var createdCompany = await db.Users.Include(u => u.Empresa).Select(u => u.Empresa!).SingleAsync();
+        var createdCompany = await db.Companies.SingleAsync();
         var templateTitles = await db.Templates.Where(t => t.EmpresaID == createdCompany.Id).Select(t => t.Titulo).ToListAsync();
 
         templateTitles.Should().HaveCount(3);

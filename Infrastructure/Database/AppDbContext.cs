@@ -33,6 +33,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<Company>(entity =>
         {
             entity.HasIndex(c => c.IdentificationId).IsUnique();
+            // One company per Vexxen subscription.
+            entity.HasIndex(c => c.BillingVexxenUserId).IsUnique();
             
             entity.HasMany(c => c.Usuarios)
                 .WithOne(u => u.Empresa)
@@ -67,6 +69,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasIndex(c => c.Email).IsUnique();
+            entity.HasIndex(u => u.VexxenUserId).IsUnique();
             
             entity.HasOne(u => u.Superior)
                 .WithMany(u => u.Subordinados)
