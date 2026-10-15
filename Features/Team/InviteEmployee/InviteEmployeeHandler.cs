@@ -6,7 +6,6 @@ using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Infrastructure.Notifications;
 using evalflow_backend_api.Infrastructure.Security;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
-using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +13,7 @@ using Microsoft.Extensions.Options;
 
 namespace evalflow_backend_api.Features.Team.InviteEmployee;
 
-public class InviteEmployeeHandler(AppDbContext dbContext, ICurrentUserService currentUser, IPasswordHasser interfacePasswordHasser, IEmailService emailService, IOptions<FrontendSettings> frontendSettings, IPlanLimitService planLimits) 
+public class InviteEmployeeHandler(AppDbContext dbContext, ICurrentUserService currentUser, IEmailService emailService, IOptions<FrontendSettings> frontendSettings, IPlanLimitService planLimits) 
     : IRequestHandler<InviteEmployeeRecord, IResult>
 {
     public async Task<IResult> Handle(InviteEmployeeRecord request, CancellationToken cancellationToken)
@@ -59,27 +58,26 @@ public class InviteEmployeeHandler(AppDbContext dbContext, ICurrentUserService c
         if (!validRoles.Contains(request.Rol))
             return Results.BadRequest($"El rol '{request.Rol}' no es válido para este entorno.");
         
-        var emailExists = await dbContext.Users.AnyAsync(u => u.Email == request.Email, cancellationToken);
+        var email = request.Email.Trim().ToLowerInvariant();
+        var emailExists = await dbContext.Users.AnyAsync(u => u.Email.ToLower() == email, cancellationToken);
         if (emailExists)
             return Results.Conflict("Ya existe un usuario con este correo electrónico en el sistema.");
 
         return null;
     }
 
-    private User CreateEmployee(InviteEmployeeRecord request, Company company)
+    // Sin cuenta de Vexxen todavía: se enlaza la primera vez que entra con Vexxen usando este email (ver
+    // VexxenSessionService). Hasta entonces la invitación queda pendiente.
+    private static User CreateEmployee(InviteEmployeeRecord request, Company company)
     {
-        var temporalPassword = Guid.NewGuid().ToString();
-
         return new User
         {
             Nombre = request.Nombre,
             Apellidos = request.Apellidos,
-            Email = request.Email,
-            PasswordHash = interfacePasswordHasser.Hash(temporalPassword), 
+            Email = request.Email.Trim().ToLowerInvariant(),
             Rol = request.Rol,
             Empresa = company,
             FechaCreacion = DateTime.UtcNow,
-            EmailVerificado = false,
             TokenInvitacion = Guid.NewGuid().ToString(),
             TokenInvitacionExpiracion = DateTime.UtcNow.AddDays(7)
         };
@@ -105,11 +103,12 @@ public class InviteEmployeeHandler(AppDbContext dbContext, ICurrentUserService c
             emailBody = template
                 .Replace("{{UserNombre}}", user.Nombre)
                 .Replace("{{CompanyNombre}}", companyName)
+                .Replace("{{UserEmail}}", user.Email)
                 .Replace("{{InviteLink}}", inviteLink);
         }
         else
         {
-            emailBody = $"<h1>Hola {user.Nombre},</h1><p>Te han invitado a unirte a <b>{companyName}</b> en EvalFlow.</p><p>Haz clic <a href='{inviteLink}'>aquí</a> para aceptar la invitación y crear tu contraseña.</p>";
+            emailBody = $"<h1>Hola {user.Nombre},</h1><p>Te han invitado a unirte a <b>{companyName}</b> en EvalFlow.</p><p>Haz clic <a href='{inviteLink}'>aquí</a> para aceptar la invitación y entra con tu cuenta de Vexxen usando {user.Email}.</p>";
         }
         
         await emailService.SendEmailAsync(

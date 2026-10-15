@@ -8,18 +8,13 @@ namespace evalflow_backend_api.Tests.Features.Onboarding.RegisterOwner;
 
 public class RegisterOwnerEndpointTests : IntegrationTestBase
 {
-    private static RegisterOwnerRecord ValidRequest(string email = "owner@example.com") => new(
-        UserNombre: "Ada",
-        Apellidos: "Lovelace",
-        Email: email,
-        Password: "SecurePass1",
+    private RegisterOwnerRecord ValidRequest(string? planId = "starter") => new(
+        VexxenAccessToken: Factory.FakeVexxen.AddUser(FakeVexxenClient.User("vx-ada", "owner@example.com"), planId, "trialing"),
         CompanyNombre: "Acme Corp",
         CompanyColors: "#FFFFFF",
-        PlanId: 1,
         Cif: "B12345678",
         DireccionFiscal: "Calle Falsa 123",
-        Sector: "Tech"
-    );
+        Sector: "Tech");
 
     [Fact]
     public async Task Post_RegisterOwner_WithoutApiKey_ReturnsUnauthorized()
@@ -32,45 +27,31 @@ public class RegisterOwnerEndpointTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task Post_RegisterOwner_WithInvalidEmail_ReturnsBadRequest()
+    public async Task Post_RegisterOwner_WithoutPlan_ReturnsConflict()
     {
-        var response = await Client.PostAsJsonAsync("/Onboarding/register-owner", ValidRequest(email: "not-an-email"));
-
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
-    public async Task Post_RegisterOwner_WithDuplicateEmail_ReturnsConflict()
-    {
-        var company = TestDataFactory.CreateCompany();
-        var existingUser = TestDataFactory.CreateUser(company, email: "owner@example.com");
-
-        await using (var db = Factory.CreateDbContext())
-        {
-            db.Companies.Add(company);
-            db.Users.Add(existingUser);
-            await db.SaveChangesAsync();
-        }
-
-        var response = await Client.PostAsJsonAsync("/Onboarding/register-owner", ValidRequest(email: "owner@example.com"));
+        var response = await Client.PostAsJsonAsync("/Onboarding/register-owner", ValidRequest(planId: null));
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("NO_PLAN");
     }
 
     [Fact]
-    public async Task Post_RegisterOwner_WithValidRequest_CreatesCompanyAndOwner()
+    public async Task Post_RegisterOwner_WithValidRequest_CreatesCompanyAndOwnerWithoutSendingEmails()
     {
         var response = await Client.PostAsJsonAsync("/Onboarding/register-owner", ValidRequest());
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var payload = await response.Content.ReadFromJsonAsync<RegisterOwnerResponse>();
         payload!.Jwt.Should().NotBeNullOrEmpty();
+        payload.PlanStatus.Should().Be("trialing");
 
         await using var verifyDb = Factory.CreateDbContext();
         var createdUser = await verifyDb.Users.Include(u => u.Empresa).SingleAsync(u => u.Email == "owner@example.com");
         createdUser.Empresa!.Nombre.Should().Be("acme corp");
+        createdUser.VexxenUserId.Should().Be("vx-ada");
 
-        Factory.FakeEmailService.SentEmails.Should().ContainSingle(e => e.To == "owner@example.com");
+        // Vexxen already verified the email: no welcome/verification email from EvalFlow.
+        Factory.FakeEmailService.SentEmails.Should().BeEmpty();
     }
 
     [Fact]
@@ -79,18 +60,7 @@ public class RegisterOwnerEndpointTests : IntegrationTestBase
         var response = await Client.PostAsJsonAsync("/Onboarding/register-owner", ValidRequest());
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-
         await using var verifyDb = Factory.CreateDbContext();
-        var createdUser = await verifyDb.Users.Include(u => u.Empresa).SingleAsync(u => u.Email == "owner@example.com");
-
-        var templateTitles = await verifyDb.Templates
-            .Where(t => t.EmpresaID == createdUser.Empresa!.Id)
-            .Select(t => t.Titulo)
-            .ToListAsync();
-
-        templateTitles.Should().HaveCount(3);
-        templateTitles.Should().Contain("Standard 180° Template (Manager Only)");
-        templateTitles.Should().Contain("Comprehensive 360° Template");
-        templateTitles.Should().Contain("Self-Assessment Template");
+        (await verifyDb.Templates.CountAsync()).Should().Be(3);
     }
 }

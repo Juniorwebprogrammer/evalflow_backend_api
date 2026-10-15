@@ -1,13 +1,12 @@
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Infrastructure.Database;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
-using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace evalflow_backend_api.Features.Companies.DeleteCompanies;
 
-public class DeleteCompaniesHandler(AppDbContext dbContext, ICurrentUserService currentUserService, IPasswordHasser passwordHasser) : IRequestHandler<DeleteCompaniesRecord, IResult>
+public class DeleteCompaniesHandler(AppDbContext dbContext, ICurrentUserService currentUserService) : IRequestHandler<DeleteCompaniesRecord, IResult>
 {
     public async Task<IResult> Handle(DeleteCompaniesRecord request, CancellationToken cancellationToken)
     {
@@ -19,16 +18,20 @@ public class DeleteCompaniesHandler(AppDbContext dbContext, ICurrentUserService 
         }
 
         var user = await FetchUserAsync(userIdString, cancellationToken);
-        if (user is null || !passwordHasser.Verify(request.Password, user.PasswordHash))
-        {
-            return Results.BadRequest("Incorrect password, canceled operation");
-        }
-        
+        if (user is null) return Results.Unauthorized();
+
         var company = await FetchCompanyAsync(identificationId, cancellationToken);
         if (company is null) return Results.NotFound("Company not found.");
+
+        // Confirmed by typing the company name (there's no EvalFlow password any more).
+        if (!string.Equals(request.CompanyName?.Trim(), company.Nombre, StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.BadRequest(new { Code = "INVALID_CONFIRMATION", Message = "The company name doesn't match, canceled operation" });
+        }
         
         await DeleteCompanyAndSaveAsync(company, cancellationToken);
 
+        // The Vexxen subscription isn't touched: the billing user cancels it from their Vexxen dashboard.
         return Results.Ok(new { Message = "Company deleted of the system" });
     }
 

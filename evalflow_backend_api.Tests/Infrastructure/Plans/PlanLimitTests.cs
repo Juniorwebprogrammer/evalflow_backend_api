@@ -12,7 +12,8 @@ using evalflow_backend_api.Infrastructure.Frontend;
 using evalflow_backend_api.Infrastructure.Notifications;
 using evalflow_backend_api.Infrastructure.Plans;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
-using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
+using evalflow_backend_api.Infrastructure.Vexxen;
+using Microsoft.Extensions.Logging.Abstractions;
 using evalflow_backend_api.Tests.Common;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -74,9 +75,9 @@ public class PlanLimitTests
 
     [Theory]
     [InlineData(PlanCatalog.Starter, false)]
-    [InlineData(PlanCatalog.Growth, true)]
+    [InlineData(PlanCatalog.Professional, true)]
     [InlineData(PlanCatalog.Enterprise, true)]
-    public async Task Service_AiFeature_OnlyOnGrowthAndEnterprise(int planId, bool expected)
+    public async Task Service_AiFeature_OnlyOnProfessionalAndEnterprise(int planId, bool expected)
     {
         await using var db = InMemoryDbContextFactory.Create();
         var company = await SeedCompanyAsync(db, planId);
@@ -106,7 +107,7 @@ public class PlanLimitTests
     {
         await using var db = InMemoryDbContextFactory.Create();
         await SeedCompanyAsync(db, activeUsers: 25);
-        var sut = new InviteEmployeeHandler(db, _currentUser.Object, Mock.Of<IPasswordHasser>(h => h.Hash(It.IsAny<string>()) == "hash"), Mock.Of<IEmailService>(),
+        var sut = new InviteEmployeeHandler(db, _currentUser.Object, Mock.Of<IEmailService>(),
             Options.Create(new FrontendSettings { BaseUrl = "http://frontend.test" }), new PlanLimitService(db));
 
         var result = await sut.Handle(new InviteEmployeeRecord("Ana", "Pérez", "ana@example.com", AppRoles.Employee), CancellationToken.None);
@@ -120,7 +121,7 @@ public class PlanLimitTests
     {
         await using var db = InMemoryDbContextFactory.Create();
         await SeedCompanyAsync(db, PlanCatalog.Enterprise, activeUsers: 120);
-        var sut = new InviteEmployeeHandler(db, _currentUser.Object, Mock.Of<IPasswordHasser>(h => h.Hash(It.IsAny<string>()) == "hash"), Mock.Of<IEmailService>(),
+        var sut = new InviteEmployeeHandler(db, _currentUser.Object, Mock.Of<IEmailService>(),
             Options.Create(new FrontendSettings { BaseUrl = "http://frontend.test" }), new PlanLimitService(db));
 
         var result = await sut.Handle(new InviteEmployeeRecord("Ana", "Pérez", "ana@example.com", AppRoles.Employee), CancellationToken.None);
@@ -213,29 +214,59 @@ public class PlanLimitTests
     public async Task GetCompanyPlan_ReturnsPlanAndUsage()
     {
         await using var db = InMemoryDbContextFactory.Create();
-        await SeedCompanyAsync(db, PlanCatalog.Growth, activeUsers: 7);
+        await SeedCompanyAsync(db, PlanCatalog.Professional, activeUsers: 7);
 
-        var result = await new GetCompanyPlanHandler(db, _currentUser.Object, new PlanLimitService(db))
+        var result = await new GetCompanyPlanHandler(db, _currentUser.Object, new PlanLimitService(db),
+                Options.Create(new VexxenSettings { BaseUrl = "http://vexxen.test", ClientId = "c", ApiKey = "k" }))
             .Handle(new GetCompanyPlanRecord(), CancellationToken.None);
 
         var dto = result.Should().BeOfType<Ok<CompanyPlanDto>>().Subject.Value!;
-        dto.Plan.Nombre.Should().Be("Growth");
+        dto.Plan.Nombre.Should().Be("Professional");
         dto.Plan.HasAiFeatures.Should().BeTrue();
         dto.Usage.Employees.Should().Be(7);
+        dto.Status.Status.Should().Be(PlanStatuses.Active);
+        dto.Status.HasAccess.Should().BeTrue();
+        dto.Status.ManageUrl.Should().Be("http://vexxen.test/dashboard/catalog?product=evaluation-flow");
     }
 
     [Fact]
-    public async Task ChangeCompanyPlan_UpdatesPlan_AndRejectsUnknownPlans()
+    public async Task ChangeCompanyPlan_SetsAManualPlan_AndRejectsUnknownPlans()
     {
         await using var db = InMemoryDbContextFactory.Create();
         var company = await SeedCompanyAsync(db);
-        var sut = new ChangeCompanyPlanHandler(db);
+        company.PlanStatus = PlanStatuses.None;
+        await db.SaveChangesAsync();
+        var sut = new ChangeCompanyPlanHandler(db, new PlanSyncService(db, new FakeVexxenClient(), NullLogger<PlanSyncService>.Instance));
 
         (await sut.Handle(new ChangeCompanyPlanRecord(Tenant, 42), CancellationToken.None))
             .Should().HaveStatusCode(StatusCodes.Status400BadRequest);
         (await sut.Handle(new ChangeCompanyPlanRecord(Tenant, PlanCatalog.Enterprise), CancellationToken.None))
             .Should().HaveStatusCode(StatusCodes.Status200OK);
 
-        (await db.Companies.SingleAsync(c => c.Id == company.Id)).PlanId.Should().Be(PlanCatalog.Enterprise);
+        var saved = await db.Companies.SingleAsync(c => c.Id == company.Id);
+        saved.PlanId.Should().Be(PlanCatalog.Enterprise);
+        saved.PlanManual.Should().BeTrue();
+        saved.PlanStatus.Should().Be(PlanStatuses.Active);
+    }
+
+    [Fact]
+    public async Task ChangeCompanyPlan_WithoutPlan_HandsTheCompanyBackToVexxen()
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+        var company = await SeedCompanyAsync(db, PlanCatalog.Enterprise);
+        company.PlanManual = true;
+        company.BillingVexxenUserId = "vx-owner";
+        await db.SaveChangesAsync();
+        var vexxen = new FakeVexxenClient();
+        vexxen.SetPlan("vx-owner", "starter", "past_due");
+
+        var result = await new ChangeCompanyPlanHandler(db, new PlanSyncService(db, vexxen, NullLogger<PlanSyncService>.Instance))
+            .Handle(new ChangeCompanyPlanRecord(Tenant, null), CancellationToken.None);
+
+        result.Should().HaveStatusCode(StatusCodes.Status200OK);
+        var saved = await db.Companies.SingleAsync(c => c.Id == company.Id);
+        saved.PlanManual.Should().BeFalse();
+        saved.PlanId.Should().Be(PlanCatalog.Starter);
+        saved.PlanStatus.Should().Be(PlanStatuses.PastDue);
     }
 }

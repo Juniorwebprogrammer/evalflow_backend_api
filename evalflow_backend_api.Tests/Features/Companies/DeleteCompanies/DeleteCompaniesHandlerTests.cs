@@ -1,7 +1,6 @@
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Features.Companies.DeleteCompanies;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
-using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
 using evalflow_backend_api.Tests.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -13,10 +12,9 @@ namespace evalflow_backend_api.Tests.Features.Companies.DeleteCompanies;
 public class DeleteCompaniesHandlerTests
 {
     private readonly Mock<ICurrentUserService> _currentUser = new();
-    private readonly Mock<IPasswordHasser> _passwordHasher = new();
 
     private DeleteCompaniesHandler CreateSut(evalflow_backend_api.Infrastructure.Database.AppDbContext dbContext) =>
-        new(dbContext, _currentUser.Object, _passwordHasher.Object);
+        new(dbContext, _currentUser.Object);
 
     [Fact]
     public async Task Handle_WithoutTenantClaim_ReturnsUnauthorized()
@@ -47,7 +45,7 @@ public class DeleteCompaniesHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenUserDoesNotExist_ReturnsBadRequest()
+    public async Task Handle_WhenUserDoesNotExist_ReturnsUnauthorized()
     {
         await using var db = InMemoryDbContextFactory.Create();
         var company = TestDataFactory.CreateCompany(identificationId: "tenant-1");
@@ -59,30 +57,30 @@ public class DeleteCompaniesHandlerTests
 
         var sut = CreateSut(db);
 
-        var result = await sut.Handle(new DeleteCompaniesRecord("whatever"), CancellationToken.None);
+        var result = await sut.Handle(new DeleteCompaniesRecord("Acme Corp"), CancellationToken.None);
 
-        result.Should().HaveStatusCode(StatusCodes.Status400BadRequest);
+        result.Should().BeOfType<UnauthorizedHttpResult>();
     }
 
     [Fact]
-    public async Task Handle_WithWrongPassword_ReturnsBadRequest()
+    public async Task Handle_WithWrongCompanyName_ReturnsBadRequestAndKeepsTheCompany()
     {
         await using var db = InMemoryDbContextFactory.Create();
         var company = TestDataFactory.CreateCompany(identificationId: "tenant-1");
-        var user = TestDataFactory.CreateUser(company, passwordHash: "stored-hash");
+        var user = TestDataFactory.CreateUser(company);
         db.Companies.Add(company);
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
         _currentUser.Setup(c => c.GetIdentificationId()).Returns("tenant-1");
         _currentUser.Setup(c => c.GetUserId()).Returns(user.Id.ToString());
-        _passwordHasher.Setup(p => p.Verify("wrong-password", "stored-hash")).Returns(false);
 
         var sut = CreateSut(db);
 
-        var result = await sut.Handle(new DeleteCompaniesRecord("wrong-password"), CancellationToken.None);
+        var result = await sut.Handle(new DeleteCompaniesRecord("Other Corp"), CancellationToken.None);
 
         result.Should().HaveStatusCode(StatusCodes.Status400BadRequest);
+        (await db.Companies.AnyAsync()).Should().BeTrue();
     }
 
     [Fact]
@@ -90,42 +88,40 @@ public class DeleteCompaniesHandlerTests
     {
         // The company being deleted is looked up by the caller's identificationId claim, not
         // the user's own EmpresaID, so a claim that doesn't match any company yields NotFound
-        // even though the user and password are perfectly valid.
+        // even though the user and the confirmation are perfectly valid.
         await using var db = InMemoryDbContextFactory.Create();
         var company = TestDataFactory.CreateCompany(identificationId: "tenant-1");
-        var user = TestDataFactory.CreateUser(company, passwordHash: "stored-hash");
+        var user = TestDataFactory.CreateUser(company);
         db.Companies.Add(company);
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
         _currentUser.Setup(c => c.GetIdentificationId()).Returns("some-other-tenant");
         _currentUser.Setup(c => c.GetUserId()).Returns(user.Id.ToString());
-        _passwordHasher.Setup(p => p.Verify("correct-password", "stored-hash")).Returns(true);
 
         var sut = CreateSut(db);
 
-        var result = await sut.Handle(new DeleteCompaniesRecord("correct-password"), CancellationToken.None);
+        var result = await sut.Handle(new DeleteCompaniesRecord("acme corp"), CancellationToken.None);
 
         result.Should().HaveStatusCode(StatusCodes.Status404NotFound);
     }
 
     [Fact]
-    public async Task Handle_WithValidPassword_DeletesCompanyAndReturnsOk()
+    public async Task Handle_WithTheCompanyName_DeletesCompanyAndReturnsOk()
     {
         await using var db = InMemoryDbContextFactory.Create();
         var company = TestDataFactory.CreateCompany(identificationId: "tenant-1");
-        var user = TestDataFactory.CreateUser(company, passwordHash: "stored-hash");
+        var user = TestDataFactory.CreateUser(company);
         db.Companies.Add(company);
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
         _currentUser.Setup(c => c.GetIdentificationId()).Returns("tenant-1");
         _currentUser.Setup(c => c.GetUserId()).Returns(user.Id.ToString());
-        _passwordHasher.Setup(p => p.Verify("correct-password", "stored-hash")).Returns(true);
 
         var sut = CreateSut(db);
 
-        var result = await sut.Handle(new DeleteCompaniesRecord("correct-password"), CancellationToken.None);
+        var result = await sut.Handle(new DeleteCompaniesRecord("acme corp"), CancellationToken.None);
 
         result.Should().HaveStatusCode(StatusCodes.Status200OK);
         (await db.Companies.AnyAsync(c => c.IdentificationId == "tenant-1")).Should().BeFalse();
@@ -136,7 +132,7 @@ public class DeleteCompaniesHandlerTests
     {
         await using var db = InMemoryDbContextFactory.Create();
         var company = TestDataFactory.CreateCompany(identificationId: "tenant-1");
-        var owner = TestDataFactory.CreateUser(company, passwordHash: "stored-hash");
+        var owner = TestDataFactory.CreateUser(company);
         var employee = TestDataFactory.CreateUser(company);
         db.Companies.Add(company);
         db.Users.AddRange(owner, employee);
@@ -157,11 +153,10 @@ public class DeleteCompaniesHandlerTests
 
         _currentUser.Setup(c => c.GetIdentificationId()).Returns("tenant-1");
         _currentUser.Setup(c => c.GetUserId()).Returns(owner.Id.ToString());
-        _passwordHasher.Setup(p => p.Verify("correct-password", "stored-hash")).Returns(true);
 
         var sut = CreateSut(db);
 
-        var result = await sut.Handle(new DeleteCompaniesRecord("correct-password"), CancellationToken.None);
+        var result = await sut.Handle(new DeleteCompaniesRecord("acme corp"), CancellationToken.None);
 
         result.Should().HaveStatusCode(StatusCodes.Status200OK);
         (await db.Companies.AnyAsync()).Should().BeFalse();

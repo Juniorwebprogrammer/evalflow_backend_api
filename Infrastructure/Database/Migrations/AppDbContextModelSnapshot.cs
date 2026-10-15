@@ -259,6 +259,10 @@ namespace evalflow_backend_api.Infrastructure.Database.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("BillingVexxenUserId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("Cif")
                         .IsRequired()
                         .HasMaxLength(15)
@@ -293,15 +297,35 @@ namespace evalflow_backend_api.Infrastructure.Database.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
+                    b.Property<DateTime?>("PlanAccessEndsAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("PlanId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("PlanManual")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PlanStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("PlanSyncedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Sector")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<DateTime?>("TrialEndsAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("BillingVexxenUserId")
+                        .IsUnique();
 
                     b.HasIndex("IdentificationId")
                         .IsUnique();
@@ -649,7 +673,7 @@ namespace evalflow_backend_api.Infrastructure.Database.Migrations
                         new
                         {
                             Id = 2,
-                            Code = "growth",
+                            Code = "professional",
                             HasAiFeatures = true,
                             MaxActiveCycles = 3,
                             MaxAiAnalysesPerMonth = 30,
@@ -657,7 +681,7 @@ namespace evalflow_backend_api.Infrastructure.Database.Migrations
                             MaxCyclesPerYear = 12,
                             MaxDepartments = 20,
                             MaxEmployees = 100,
-                            Nombre = "Growth"
+                            Nombre = "Professional"
                         },
                         new
                         {
@@ -841,14 +865,8 @@ namespace evalflow_backend_api.Infrastructure.Database.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)");
 
-                    b.Property<bool>("EmailVerificado")
-                        .HasColumnType("boolean");
-
                     b.Property<int>("EmpresaID")
                         .HasColumnType("integer");
-
-                    b.Property<DateTime?>("ExpiracionTokenRecuperacion")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("FechaActualizacion")
                         .HasColumnType("timestamp with time zone");
@@ -860,11 +878,6 @@ namespace evalflow_backend_api.Infrastructure.Database.Migrations
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
-
-                    b.Property<string>("PasswordHash")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
 
                     b.Property<string>("Rol")
                         .IsRequired()
@@ -879,24 +892,9 @@ namespace evalflow_backend_api.Infrastructure.Database.Migrations
                     b.Property<DateTime?>("TokenInvitacionExpiracion")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("TokenRecuperacionPassword")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("TokenValidacionEmail")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("TokenValidacionExpiracion")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("TwoFactorCode")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("TwoFactorCodeExpiration")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("TwoFactorEnabled")
-                        .HasColumnType("boolean");
+                    b.Property<string>("VexxenUserId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.HasKey("Id");
 
@@ -910,6 +908,9 @@ namespace evalflow_backend_api.Infrastructure.Database.Migrations
                     b.HasIndex("EmpresaID");
 
                     b.HasIndex("SuperiorId");
+
+                    b.HasIndex("VexxenUserId")
+                        .IsUnique();
 
                     b.ToTable("Users");
                 });

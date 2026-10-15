@@ -23,14 +23,24 @@ public record PlanDto(
 
 public record PlanUsageDto(int Employees, int ActiveCycles, int CyclesThisYear, int CustomTemplates, int Departments, int AiAnalysesThisMonth);
 
-/// <summary>The caller's company plan plus how much of each limit it uses.</summary>
-public record CompanyPlanDto(PlanDto Plan, PlanUsageDto Usage);
+/// <summary>
+/// Where the plan stands (from Vexxen): Status (trialing, active, canceling, past_due or none = read-only),
+/// AccessEndsAt (canceling/past_due: until when), TrialEndsAt, Manual (set by an Administrator, e.g. Enterprise)
+/// and where to manage it (the Vexxen catalog / billing).
+/// </summary>
+public record PlanStatusDto(string Status, bool HasAccess, DateTime? AccessEndsAt, DateTime? TrialEndsAt, bool Manual, string ManageUrl);
+
+/// <summary>The caller's company plan, its status and how much of each limit it uses.</summary>
+public record CompanyPlanDto(PlanDto Plan, PlanUsageDto Usage, PlanStatusDto Status);
 
 public record GetPlansRecord : IRequest<IResult>;
 
 public record GetCompanyPlanRecord : IRequest<IResult>;
 
-/// <summary>Administrator-only: moves a company to another plan (no payment gateway yet).</summary>
-public record ChangeCompanyPlanRecord(string IdentificationId, int PlanId) : IRequest<IResult>;
+/// <summary>
+/// Administrator-only. A PlanId sets that plan by hand (Enterprise, sold by the sales team): active, and the sync
+/// with Vexxen leaves it alone. PlanId null hands the company back to its Vexxen subscription.
+/// </summary>
+public record ChangeCompanyPlanRecord(string IdentificationId, int? PlanId) : IRequest<IResult>;
 
-public record ChangeCompanyPlanBody(int PlanId);
+public record ChangeCompanyPlanBody(int? PlanId);

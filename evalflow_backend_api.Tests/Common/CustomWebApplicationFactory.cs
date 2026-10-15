@@ -1,5 +1,6 @@
 using evalflow_backend_api.Infrastructure.Database;
 using evalflow_backend_api.Infrastructure.Notifications;
+using evalflow_backend_api.Infrastructure.Vexxen;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +23,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
     public string DbName { get; } = $"TestDb-{Guid.NewGuid()}";
     public FakeEmailService FakeEmailService { get; } = new();
+    public FakeVexxenClient FakeVexxen { get; } = new();
 
     // Shared with CreateDbContext() below: EF Core's in-memory provider only shares a store
     // between separately-built DbContextOptions when they're pointed at the same root.
@@ -37,6 +39,9 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Secret", "test-only-jwt-secret-at-least-32-bytes-long!!");
         builder.UseSetting("Encryption:Key", "test-only-encryption-key-32bytes");
         builder.UseSetting("Frontend:BaseUrl", "http://frontend.test");
+        builder.UseSetting("Vexxen:BaseUrl", "http://vexxen.test");
+        builder.UseSetting("Vexxen:ClientId", "vexxen_test");
+        builder.UseSetting("Vexxen:ApiKey", "test-only-vexxen-api-key");
 
         builder.ConfigureServices(services =>
         {
@@ -60,6 +65,10 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             // Never send real emails during tests.
             services.RemoveAll<IEmailService>();
             services.AddSingleton<IEmailService>(FakeEmailService);
+
+            // Never call the real Vexxen: accounts, sessions and plans come from FakeVexxen.
+            services.RemoveAll<IVexxenClient>();
+            services.AddSingleton<IVexxenClient>(FakeVexxen);
 
             // The reminder job polls the database on a 24h loop; keep it out of test runs.
             services.RemoveAll<IHostedService>();

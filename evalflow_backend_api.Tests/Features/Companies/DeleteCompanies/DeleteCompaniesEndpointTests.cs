@@ -34,7 +34,7 @@ public class DeleteCompaniesEndpointTests : IntegrationTestBase
     public async Task Delete_Company_WithEmployeeRole_ReturnsForbidden()
     {
         var company = TestDataFactory.CreateCompany(identificationId: "tenant-1");
-        var user = TestDataFactory.CreateUser(company, rol: AppRoles.Employee, passwordHash: BCrypt.Net.BCrypt.HashPassword("correct-password"));
+        var user = TestDataFactory.CreateUser(company, rol: AppRoles.Employee);
 
         await using (var db = Factory.CreateDbContext())
         {
@@ -45,16 +45,16 @@ public class DeleteCompaniesEndpointTests : IntegrationTestBase
 
         var client = CreateAuthenticatedClient(user, company);
 
-        var response = await client.SendAsync(BuildDeleteRequest(new DeleteCompaniesRecord("correct-password")));
+        var response = await client.SendAsync(BuildDeleteRequest(new DeleteCompaniesRecord("Acme Corp")));
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
-    public async Task Delete_Company_WithOwnerRoleAndCorrectPassword_DeletesCompany()
+    public async Task Delete_Company_WithOwnerRoleAndTheCompanyName_DeletesCompany()
     {
         var company = TestDataFactory.CreateCompany(identificationId: "tenant-1");
-        var user = TestDataFactory.CreateUser(company, rol: AppRoles.Owner, passwordHash: BCrypt.Net.BCrypt.HashPassword("correct-password"));
+        var user = TestDataFactory.CreateUser(company, rol: AppRoles.Owner);
 
         await using (var db = Factory.CreateDbContext())
         {
@@ -65,7 +65,7 @@ public class DeleteCompaniesEndpointTests : IntegrationTestBase
 
         var client = CreateAuthenticatedClient(user, company);
 
-        var response = await client.SendAsync(BuildDeleteRequest(new DeleteCompaniesRecord("correct-password")));
+        var response = await client.SendAsync(BuildDeleteRequest(new DeleteCompaniesRecord("Acme Corp")));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 

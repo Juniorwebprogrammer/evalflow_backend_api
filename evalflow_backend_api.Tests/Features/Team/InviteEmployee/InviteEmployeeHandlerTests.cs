@@ -4,7 +4,6 @@ using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Features.Team.InviteEmployee;
 using evalflow_backend_api.Infrastructure.Notifications;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
-using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
 using evalflow_backend_api.Tests.Common;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -18,11 +17,10 @@ namespace evalflow_backend_api.Tests.Features.Team.InviteEmployee;
 public class InviteEmployeeHandlerTests
 {
     private readonly Mock<ICurrentUserService> _currentUser = new();
-    private readonly Mock<IPasswordHasser> _passwordHasher = new();
     private readonly Mock<IEmailService> _emailService = new();
 
     private InviteEmployeeHandler CreateSut(evalflow_backend_api.Infrastructure.Database.AppDbContext dbContext) =>
-        new(dbContext, _currentUser.Object, _passwordHasher.Object, _emailService.Object, Options.Create(new FrontendSettings { BaseUrl = "http://frontend.test" }), new PlanLimitService(dbContext));
+        new(dbContext, _currentUser.Object, _emailService.Object, Options.Create(new FrontendSettings { BaseUrl = "http://frontend.test" }), new PlanLimitService(dbContext));
 
     [Fact]
     public async Task Handle_WithoutTenantClaim_ReturnsUnauthorized()
@@ -104,7 +102,6 @@ public class InviteEmployeeHandlerTests
         await db.SaveChangesAsync();
 
         _currentUser.Setup(c => c.GetIdentificationId()).Returns("tenant-1");
-        _passwordHasher.Setup(p => p.Hash(It.IsAny<string>())).Returns("hashed-temp-password");
 
         var sut = CreateSut(db);
 
@@ -116,11 +113,28 @@ public class InviteEmployeeHandlerTests
 
         var savedUser = await db.Users.SingleAsync(u => u.Email == "ana@example.com");
         savedUser.EmpresaID.Should().Be(company.Id);
-        savedUser.PasswordHash.Should().Be("hashed-temp-password");
-        savedUser.EmailVerificado.Should().BeFalse();
+        // No Vexxen account yet: it gets linked when Ana signs in with Vexxen using this email.
+        savedUser.VexxenUserId.Should().BeNull();
         savedUser.TokenInvitacion.Should().NotBeNullOrEmpty();
         savedUser.TokenInvitacionExpiracion.Should().NotBeNull();
 
         _emailService.Verify(e => e.SendEmailAsync("ana@example.com", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_NormalizesTheEmailAndRejectsTheSameEmailInAnotherCase()
+    {
+        await using var db = InMemoryDbContextFactory.Create();
+        var company = TestDataFactory.CreateCompany(identificationId: "tenant-1");
+        db.Companies.Add(company);
+        db.Users.Add(TestDataFactory.CreateUser(company, email: "ana@example.com"));
+        await db.SaveChangesAsync();
+        _currentUser.Setup(c => c.GetIdentificationId()).Returns("tenant-1");
+
+        var duplicate = await CreateSut(db).Handle(new InviteEmployeeRecord("Ana", "Perez", "ANA@Example.com", AppRoles.Employee), CancellationToken.None);
+        duplicate.Should().HaveStatusCode(StatusCodes.Status409Conflict);
+
+        await CreateSut(db).Handle(new InviteEmployeeRecord("Bea", "Ruiz", " Bea@Example.com ", AppRoles.Employee), CancellationToken.None);
+        (await db.Users.AnyAsync(u => u.Email == "bea@example.com")).Should().BeTrue();
     }
 }

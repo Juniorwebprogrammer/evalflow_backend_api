@@ -1,14 +1,9 @@
 using evalflow_backend_api.Infrastructure.SignalR;
 using evalflow_backend_api.Features.AiAnalysis.GetCycleAiAnalyses;
 using evalflow_backend_api.Features.AiAnalysis.RequestAiAnalysis;
-using evalflow_backend_api.Features.Auth.ForgotPassword;
 using evalflow_backend_api.Features.Auth.GetMyFeatures;
-using evalflow_backend_api.Features.Auth.Login;
-using evalflow_backend_api.Features.Auth.Resend2FA;
-using evalflow_backend_api.Features.Auth.ResendVerification;
-using evalflow_backend_api.Features.Auth.ResetPassword;
-using evalflow_backend_api.Features.Auth.Verify2FA;
-using evalflow_backend_api.Features.Auth.VerifyEmail;
+using evalflow_backend_api.Features.Auth.Vexxen;
+using evalflow_backend_api.Features.Team.GetInvitation;
 using evalflow_backend_api.Features.Clarifications.CreateClarification;
 using evalflow_backend_api.Features.Clarifications.GetCycleClarifications;
 using evalflow_backend_api.Features.Clarifications.GetMyClarifications;
@@ -50,16 +45,12 @@ using evalflow_backend_api.Features.JobPositions.GetJobPositions;
 using evalflow_backend_api.Features.JobPositions.ManageJobPositions;
 using evalflow_backend_api.Features.Onboarding.RegisterOwner;
 using evalflow_backend_api.Features.Profile.Avatar;
-using evalflow_backend_api.Features.Profile.ChangePassword;
 using evalflow_backend_api.Features.Profile.DeleteAccount;
 using evalflow_backend_api.Features.Profile.GetProfileInformation;
-using evalflow_backend_api.Features.Profile.UpdateProfileInformation;
 using evalflow_backend_api.Features.Questions.CreateQuestion;
 using evalflow_backend_api.Features.Questions.DeleteQuestion;
 using evalflow_backend_api.Features.Questions.GetQuestionsByTemplate;
 using evalflow_backend_api.Features.Questions.UpdateQuestion;
-using evalflow_backend_api.Features.Settings.Toggle2FA;
-using evalflow_backend_api.Features.Team.AcceptInvite;
 using evalflow_backend_api.Features.Team.AssignDepartment;
 using evalflow_backend_api.Features.Team.AssignJobPosition;
 using evalflow_backend_api.Features.Team.AssignSuperior;
@@ -87,22 +78,14 @@ public static class EndpointExtensions
         // Onboarding
         app.MapRegisterOwner();
 
-        // Auth
-        app.MapLogin();
-        app.MapVerifyEmail();
-        app.MapResendVerification();
-        app.MapVerify2FA();
-        app.MapResend2FA();
+        // Auth (con Vexxen; los flujos antiguos de contraseña y 2FA responden 410)
+        app.MapVexxenAuth();
+        app.MapRetiredAuth();
         app.MapGetMyFeatures();
-        app.MapForgotPassword();
-        app.MapResetPassword();
-
-        // Settings
-        app.MapToggle2FA();
 
         // Team
         app.MapInviteEmployee();
-        app.MapAcceptInvite();
+        app.MapGetInvitation();
         app.MapGetEmployees();
         app.MapAssignDepartment();
         app.MapAssignSuperior();
@@ -112,9 +95,7 @@ public static class EndpointExtensions
 
         // Profile
         app.MapGetProfile();
-        app.MapUpdateProfile();
         app.MapProfileAvatar();
-        app.MapChangePassword();
         app.MapDeleteAccount();
 
         // Company

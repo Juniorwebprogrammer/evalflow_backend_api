@@ -7,7 +7,8 @@ using evalflow_backend_api.Infrastructure.Jwt;
 using evalflow_backend_api.Infrastructure.Notifications;
 using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
 using evalflow_backend_api.Infrastructure.Security.Encryption;
-using evalflow_backend_api.Infrastructure.Security.PasswordHasher;
+using evalflow_backend_api.Infrastructure.Vexxen;
+using evalflow_backend_api.Features.Auth.Vexxen;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Options;
@@ -23,7 +24,8 @@ public static class DependencyInjectionExtensions
         services.AddScoped<IJwtProvider, JwtProvider>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IPlanLimitService, PlanLimitService>();
-        services.AddScoped<IPasswordHasser, PasswordHasher>();
+        services.AddScoped<IPlanSyncService, PlanSyncService>();
+        services.AddScoped<VexxenSessionService>();
         services.AddScoped<IEncryptionService, AesEncryptionService>();
         
         // Agregar servicios core (tu extensión existente)
@@ -105,6 +107,18 @@ public static class DependencyInjectionExtensions
             var ai = sp.GetRequiredService<IOptions<AiSettings>>().Value;
             client.BaseAddress = new Uri(ai.BaseUrl.TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromSeconds(ai.TimeoutSeconds);
+        });
+
+        // Vexxen: cuentas, sesiones y planes (ver Infrastructure/Vexxen/VexxenSettings).
+        services.AddOptions<VexxenSettings>()
+            .Bind(configuration.GetSection(VexxenSettings.SectionName))
+            .Validate(s => s.IsValid(), "Faltan Vexxen:BaseUrl (URL válida), Vexxen:ClientId o Vexxen:ApiKey (variables Vexxen__BaseUrl, Vexxen__ClientId y Vexxen__ApiKey).")
+            .ValidateOnStart();
+        services.AddHttpClient<IVexxenClient, VexxenClient>((sp, client) =>
+        {
+            var vexxen = sp.GetRequiredService<IOptions<VexxenSettings>>().Value;
+            client.BaseAddress = new Uri(vexxen.BaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(vexxen.TimeoutSeconds);
         });
 
         services.AddHttpContextAccessor();

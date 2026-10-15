@@ -33,7 +33,6 @@ public class GetProfileInformationHandler(AppDbContext dbContext, ICurrentUserSe
                 user.FechaCreacion,
                 user.Empresa!.Nombre,
                 user.Empresa!.IdentificationId,
-                user.TwoFactorEnabled,
                 dbContext.UserAvatars
                     .Where(avatar => avatar.UserId == user.Id)
                     .Select(avatar => (DateTime?)avatar.UpdatedAt)

@@ -9,7 +9,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
         
@@ -18,16 +17,7 @@
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
         
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3" />
-        <None Update="Infrastructure\Notifications\Templates\WelcomeEmail.html">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </None>
-        <None Update="Infrastructure\Notifications\Templates\TwoFactorEmail.html">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </None>
         <None Update="Infrastructure\Notifications\Templates\InviteEmail.html">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </None>
-        <None Update="Infrastructure\Notifications\Templates\PasswordRecovery.html">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
         <None Update="Infrastructure\Notifications\Templates\EvaluationAssignedEmail.html">

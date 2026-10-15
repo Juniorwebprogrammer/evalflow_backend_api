@@ -44,7 +44,7 @@ public class RequestAiAnalysisHandlerTests
         _encryption.Object, _sender.Object, new AiAnalysisQueueSignal(), Options.Create(_settings),
         NullLogger<RequestAiAnalysisHandler>.Instance);
 
-    private static async Task<EvaluationCycle> SeedAsync(AppDbContext db, int planId = PlanCatalog.Growth, string tenant = Tenant)
+    private static async Task<EvaluationCycle> SeedAsync(AppDbContext db, int planId = PlanCatalog.Professional, string tenant = Tenant)
     {
         var company = TestDataFactory.CreateCompany(identificationId: tenant, planId: planId);
         db.Companies.Add(company);
@@ -181,7 +181,7 @@ public class RequestAiAnalysisHandlerTests
     {
         await using var db = InMemoryDbContextFactory.Create();
         var cycle = await SeedAsync(db);
-        var quota = PlanCatalog.Get(PlanCatalog.Growth).MaxAiAnalysesPerMonth!.Value;
+        var quota = PlanCatalog.Get(PlanCatalog.Professional).MaxAiAnalysesPerMonth!.Value;
         db.AiEvaluationAnalyses.AddRange(Enumerable.Range(0, quota).Select(i => new AiEvaluationAnalysis
         {
             EmpresaID = cycle.EmpresaID, EvaluationCycleId = cycle.Id, TemplateId = 99, EvaluatedUserId = 1000 + i,
@@ -201,7 +201,7 @@ public class RequestAiAnalysisHandlerTests
     {
         await using var db = InMemoryDbContextFactory.Create();
         var cycle = await SeedAsync(db);
-        var quota = PlanCatalog.Get(PlanCatalog.Growth).MaxAiAnalysesPerMonth!.Value;
+        var quota = PlanCatalog.Get(PlanCatalog.Professional).MaxAiAnalysesPerMonth!.Value;
         db.AiEvaluationAnalyses.AddRange(Enumerable.Range(0, quota).Select(i => new AiEvaluationAnalysis
         {
             EmpresaID = cycle.EmpresaID, EvaluationCycleId = cycle.Id, TemplateId = 99, EvaluatedUserId = 1000 + i,
