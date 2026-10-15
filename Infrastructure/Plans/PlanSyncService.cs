@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Infrastructure.Database;
@@ -33,6 +34,10 @@ public class PlanSyncService(AppDbContext dbContext, IVexxenClient vexxen, ILogg
         try
         {
             var access = await vexxen.GetAccessAsync(company.BillingVexxenUserId, cancellationToken);
+            if (!access.Access && access.TransferredTo is { } newBillingUserId)
+            {
+                access = await HandOverAsync(company, newBillingUserId, access, cancellationToken);
+            }
             PlanSync.Apply(company, access, now);
         }
         catch (VexxenUserNotFoundException)
@@ -47,6 +52,38 @@ public class PlanSyncService(AppDbContext dbContext, IVexxenClient vexxen, ILogg
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The billing user transferred their EvalFlow subscription to someone else in Vexxen. If that person belongs to
+    /// the company, they become its billing user and Owner, and the previous Owner stays as HR; the plan is then read
+    /// from them. If not, the company is left without plan (read-only): only members can take over a company.
+    /// </summary>
+    private async Task<VexxenAccess> HandOverAsync(Company company, string newBillingUserId, VexxenAccess previousAccess,
+        CancellationToken cancellationToken)
+    {
+        var newOwner = await dbContext.Users.FirstOrDefaultAsync(
+            u => u.EmpresaID == company.Id && u.VexxenUserId == newBillingUserId && u.Activo, cancellationToken);
+        if (newOwner is null)
+        {
+            logger.LogWarning("Company {CompanyId}: its subscription was transferred to someone outside the company; it stays read-only", company.Id);
+            return previousAccess;
+        }
+
+        var previousOwner = await dbContext.Users.FirstOrDefaultAsync(
+            u => u.EmpresaID == company.Id && u.VexxenUserId == company.BillingVexxenUserId, cancellationToken);
+        if (previousOwner is not null && previousOwner.Rol == AppRoles.Owner)
+        {
+            previousOwner.Rol = AppRoles.Rrhh;
+            previousOwner.FechaActualizacion = DateTime.UtcNow;
+        }
+
+        newOwner.Rol = AppRoles.Owner;
+        newOwner.FechaActualizacion = DateTime.UtcNow;
+        company.BillingVexxenUserId = newBillingUserId;
+        logger.LogInformation("Company {CompanyId}: billing handed over to user {UserId}", company.Id, newOwner.Id);
+
+        return await vexxen.GetAccessAsync(newBillingUserId, cancellationToken);
     }
 }
 

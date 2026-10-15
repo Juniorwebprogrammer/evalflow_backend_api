@@ -9,7 +9,8 @@ public record VexxenAccessPlan(string Id, string Name, bool Paid);
 
 /// <summary>
 /// Qué tiene un usuario del producto EvalFlow (GET /api/access/{userId}). Status: active, trialing, canceling,
-/// past_due, free o none. Las fechas, en UTC.
+/// past_due, free o none. Las fechas, en UTC. TransferredTo: sin plan porque se lo transfirió a ese usuario de
+/// Vexxen (que ahora lo paga).
 /// </summary>
 public record VexxenAccess(
     string ProductId,
@@ -20,4 +21,5 @@ public record VexxenAccess(
     DateTime? CurrentPeriodEnd,
     bool CancelAtPeriodEnd,
     DateTime? TrialEndsAt,
-    DateTime? AccessEndsAt);
+    DateTime? AccessEndsAt,
+    string? TransferredTo = null);

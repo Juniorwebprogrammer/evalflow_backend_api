@@ -123,6 +123,45 @@ public class PlanSyncTests
     }
 
     [Fact]
+    public async Task Sync_TransferredToAMember_MakesThemOwnerAndBillingUser_AndThePreviousOwnerHR()
+    {
+        var (sut, vexxen, company, db) = await SetupAsync();
+        var owner = TestDataFactory.CreateUser(company, rol: AppRoles.Owner, vexxenUserId: "vx-owner");
+        var hr = TestDataFactory.CreateUser(company, rol: AppRoles.Rrhh, vexxenUserId: "vx-hr");
+        db.Users.AddRange(owner, hr);
+        await db.SaveChangesAsync();
+        vexxen.AccessByUserId["vx-owner"] = FakeVexxenClient.Access(null, "none") with { TransferredTo = "vx-hr" };
+        vexxen.SetPlan("vx-hr", "professional");
+
+        await sut.SyncAsync(company, CancellationToken.None);
+
+        var saved = await db.Companies.AsNoTracking().SingleAsync();
+        saved.BillingVexxenUserId.Should().Be("vx-hr");
+        saved.PlanId.Should().Be(PlanCatalog.Professional);
+        saved.PlanStatus.Should().Be(PlanStatuses.Active);
+        (await db.Users.AsNoTracking().SingleAsync(u => u.Id == hr.Id)).Rol.Should().Be(AppRoles.Owner);
+        (await db.Users.AsNoTracking().SingleAsync(u => u.Id == owner.Id)).Rol.Should().Be(AppRoles.Rrhh);
+    }
+
+    [Fact]
+    public async Task Sync_TransferredToSomeoneOutsideTheCompany_LeavesItReadOnly()
+    {
+        var (sut, vexxen, company, db) = await SetupAsync();
+        var owner = TestDataFactory.CreateUser(company, rol: AppRoles.Owner, vexxenUserId: "vx-owner");
+        db.Users.Add(owner);
+        await db.SaveChangesAsync();
+        vexxen.AccessByUserId["vx-owner"] = FakeVexxenClient.Access(null, "none") with { TransferredTo = "vx-stranger" };
+        vexxen.SetPlan("vx-stranger", "professional");
+
+        await sut.SyncAsync(company, CancellationToken.None);
+
+        var saved = await db.Companies.AsNoTracking().SingleAsync();
+        saved.BillingVexxenUserId.Should().Be("vx-owner");
+        saved.PlanStatus.Should().Be(PlanStatuses.None);
+        (await db.Users.AsNoTracking().SingleAsync()).Rol.Should().Be(AppRoles.Owner);
+    }
+
+    [Fact]
     public async Task Sync_WhenTheBillingAccountWasDeleted_LeavesTheCompanyWithoutPlan()
     {
         var (sut, vexxen, company, db) = await SetupAsync();

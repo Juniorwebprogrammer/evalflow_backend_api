@@ -81,12 +81,13 @@ public class VexxenClientTests
     public async Task Access_WithoutTheProduct_HasNoPlan()
     {
         var (client, _) = Create(_ => Json(HttpStatusCode.OK,
-            """{"productId":"evaluation-flow","access":false,"status":"none","plan":null,"cycle":null,"currentPeriodEnd":null,"cancelAtPeriodEnd":false,"trialEndsAt":null,"accessEndsAt":null}"""));
+            """{"productId":"evaluation-flow","access":false,"status":"none","plan":null,"cycle":null,"currentPeriodEnd":null,"cancelAtPeriodEnd":false,"trialEndsAt":null,"accessEndsAt":null,"transferredTo":"u-2"}"""));
 
         var access = await client.GetAccessAsync("u-1", CancellationToken.None);
 
         access.Access.Should().BeFalse();
         access.Plan.Should().BeNull();
+        access.TransferredTo.Should().Be("u-2");
     }
 
     [Fact]
