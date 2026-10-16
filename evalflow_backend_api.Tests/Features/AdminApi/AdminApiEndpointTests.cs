@@ -108,7 +108,7 @@ public class AdminApiEndpointTests : IntegrationTestBase
     {
         var manifest = await JsonAsync(await Viewer.GetAsync("/admin/v1/manifest"));
 
-        manifest.GetProperty("contractVersion").GetString().Should().Be("1.1");
+        manifest.GetProperty("contractVersion").GetString().Should().Be("1.2");
         manifest.GetProperty("app").GetProperty("id").GetString().Should().Be("evalflow");
         manifest.GetProperty("app").GetProperty("name").GetString().Should().Be("EvalFlow");
         manifest.GetProperty("resources").EnumerateArray().Select(r => r.GetProperty("key").GetString())

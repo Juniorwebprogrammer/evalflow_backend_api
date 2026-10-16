@@ -32,6 +32,10 @@ public class RegisterOwnerHandler(AppDbContext dbContext, IJwtProvider jwtProvid
         {
             return VexxenErrors.InvalidSession();
         }
+        catch (VexxenAccountSuspendedException)
+        {
+            return VexxenErrors.Suspended(StatusCodes.Status403Forbidden);
+        }
         catch (VexxenException)
         {
             return VexxenErrors.Unavailable();

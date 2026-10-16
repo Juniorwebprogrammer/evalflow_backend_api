@@ -45,6 +45,13 @@ public class PlanSyncService(AppDbContext dbContext, IVexxenClient vexxen, ILogg
             // The billing account was deleted in Vexxen: its subscription is gone with it.
             PlanSync.ApplyNoAccess(company, now);
         }
+        catch (VexxenAccountSuspendedException)
+        {
+            // Vexxen won't say what a suspended account has (its subscription isn't touched by the suspension): the
+            // company keeps its last known plan, as when Vexxen is down. Its members still sign in with their own accounts.
+            logger.LogWarning("The billing user of company {CompanyId} is suspended in Vexxen; keeping {Status}", company.Id, company.PlanStatus);
+            return;
+        }
         catch (VexxenUnavailableException ex)
         {
             logger.LogWarning(ex, "Couldn't sync the plan of company {CompanyId}; keeping {Status}", company.Id, company.PlanStatus);

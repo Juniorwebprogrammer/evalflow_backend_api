@@ -113,6 +113,54 @@ public class VexxenClientTests
     }
 
     [Fact]
+    public async Task Access_ForASuspendedAccount_ThrowsSuspended()
+    {
+        var (client, _) = Create(_ => Json(HttpStatusCode.Forbidden, """{"error":"This account is suspended","code":"ACCOUNT_SUSPENDED"}"""));
+
+        await FluentActions.Awaiting(() => client.GetAccessAsync("u-1", CancellationToken.None))
+            .Should().ThrowAsync<VexxenAccountSuspendedException>();
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.OK, """{"productId":"evaluation-flow","access":false,"status":"none","plan":null,"cycle":null,"currentPeriodEnd":null,"cancelAtPeriodEnd":false,"trialEndsAt":null,"accessEndsAt":null}""", VexxenAccountStatus.Active)]
+    [InlineData(HttpStatusCode.Forbidden, """{"error":"This account is suspended","code":"ACCOUNT_SUSPENDED"}""", VexxenAccountStatus.Suspended)]
+    [InlineData(HttpStatusCode.NotFound, """{"error":"User not found","code":"USER_NOT_FOUND"}""", VexxenAccountStatus.Deleted)]
+    public async Task AccountStatus_ReadsTheAccessEndpoint(HttpStatusCode status, string body, VexxenAccountStatus expected)
+    {
+        var (client, handler) = Create(_ => Json(status, body));
+
+        (await client.GetAccountStatusAsync("u 1", CancellationToken.None)).Should().Be(expected);
+
+        var request = handler.Requests.Single();
+        request.Method.Should().Be(HttpMethod.Get);
+        request.RequestUri!.AbsolutePath.Should().Be("/api/access/u%201");
+        request.Headers.GetValues("X-Client-Id").Should().Equal("vexxen_f873382b");
+        request.Headers.GetValues("X-Api-Key").Should().Equal("secret-key");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden, """{"error":"This client isn't linked to a product","code":"CLIENT_WITHOUT_PRODUCT"}""")]
+    [InlineData(HttpStatusCode.NotFound, """{"error":"Product not found","code":"PRODUCT_NOT_FOUND"}""")]
+    [InlineData(HttpStatusCode.InternalServerError, """{"error":"Internal error"}""")]
+    [InlineData(HttpStatusCode.BadGateway, "<html>bad gateway</html>")]
+    public async Task AccountStatus_ConfigurationOrServerProblems_ThrowUnavailable(HttpStatusCode status, string body)
+    {
+        var (client, _) = Create(_ => Json(status, body));
+
+        await FluentActions.Awaiting(() => client.GetAccountStatusAsync("u-1", CancellationToken.None))
+            .Should().ThrowAsync<VexxenUnavailableException>();
+    }
+
+    [Fact]
+    public async Task AccountStatus_NetworkFailure_ThrowsUnavailable()
+    {
+        var (client, _) = Create(_ => throw new TaskCanceledException("timeout"));
+
+        await FluentActions.Awaiting(() => client.GetAccountStatusAsync("u-1", CancellationToken.None))
+            .Should().ThrowAsync<VexxenUnavailableException>();
+    }
+
+    [Fact]
     public async Task NetworkFailure_ThrowsUnavailable()
     {
         var (client, _) = Create(_ => throw new HttpRequestException("connection refused"));
@@ -137,6 +185,25 @@ public class VexxenClientTests
     public async Task Refresh_WithAnExpiredToken_ThrowsUnauthorized()
     {
         var (client, _) = Create(_ => Json(HttpStatusCode.Unauthorized, """{"error":"Invalid refresh token","code":"INVALID_REFRESH_TOKEN"}"""));
+
+        await FluentActions.Awaiting(() => client.RefreshAsync("r1", CancellationToken.None))
+            .Should().ThrowAsync<VexxenUnauthorizedException>();
+    }
+
+    [Fact]
+    public async Task Refresh_OfASuspendedAccount_ThrowsSuspended()
+    {
+        var (client, _) = Create(_ => Json(HttpStatusCode.Forbidden,
+            """{"error":"This account has been suspended. Contact support if you think this is a mistake.","code":"ACCOUNT_SUSPENDED"}"""));
+
+        await FluentActions.Awaiting(() => client.RefreshAsync("r1", CancellationToken.None))
+            .Should().ThrowAsync<VexxenAccountSuspendedException>();
+    }
+
+    [Fact]
+    public async Task Refresh_OfADeletedAccount_ThrowsUnauthorized()
+    {
+        var (client, _) = Create(_ => Json(HttpStatusCode.NotFound, """{"error":"This account no longer exists","code":"ACCOUNT_NOT_FOUND"}"""));
 
         await FluentActions.Awaiting(() => client.RefreshAsync("r1", CancellationToken.None))
             .Should().ThrowAsync<VexxenUnauthorizedException>();

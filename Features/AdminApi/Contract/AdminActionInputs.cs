@@ -58,7 +58,8 @@ public static class AdminActionInputs
         return result;
     }
 
-    private static (object? Value, string? Error) Parse(ActionInputDescriptor input, JsonElement value)
+    /// <summary>One value (not null) against its input: the value, or why it isn't valid. Shared with the edit changes.</summary>
+    internal static (object? Value, string? Error) Parse(ActionInputDescriptor input, JsonElement value)
     {
         switch (input.Type)
         {

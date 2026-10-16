@@ -23,3 +23,11 @@ public record VexxenAccess(
     DateTime? TrialEndsAt,
     DateTime? AccessEndsAt,
     string? TransferredTo = null);
+
+/// <summary>Si la cuenta de Vexxen puede usarse (GET /api/access/{userId}: 200, 403 ACCOUNT_SUSPENDED o 404 USER_NOT_FOUND).</summary>
+public enum VexxenAccountStatus
+{
+    Active,
+    Suspended,
+    Deleted,
+}

@@ -4,6 +4,7 @@ using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Features.Admin.CreateAdministrator;
 using evalflow_backend_api.Features.AdminApi.Contract;
 using evalflow_backend_api.Infrastructure.Database;
+using evalflow_backend_api.Infrastructure.Plans;
 using Microsoft.EntityFrameworkCore;
 
 namespace evalflow_backend_api.Features.AdminApi.Resources;
@@ -26,9 +27,10 @@ public sealed record UserAdminItem(
 /// <summary>
 /// The people of the client companies (the administrators, in the internal company, are left out). Status: active
 /// (signed in with Vexxen), invited (the invitation hasn't been accepted yet) or inactive (disabled by the company).
-/// The invitation token is never returned, only when it expires.
+/// The invitation token is never returned, only when it expires. Edit: only the role within the company (see
+/// <see cref="EditAsync"/> for its rules).
 /// </summary>
-public class UsersAdminResource(AppDbContext dbContext) : IAdminResource
+public class UsersAdminResource(AppDbContext dbContext, IPlanLimitService companyLock) : IAdminResource
 {
     public const string Key = "users";
 
@@ -89,7 +91,17 @@ public class UsersAdminResource(AppDbContext dbContext) : IAdminResource
             ]),
         true,
         [],
-        []);
+        [])
+    {
+        // Not the name or the email: Vexxen owns them and EvalFlow copies them again on every sign-in and session
+        // refresh, so an edit here would be undone within the hour. Not the company either (it would take the person's
+        // evaluations to another tenant). Never Administrator: it isn't an option, and administrators aren't listed.
+        Edit = new EditDescriptor(
+            "El nuevo rol se aplica cuando la persona renueve su sesión de EvalFlow (como mucho, en una hora).",
+            [
+                new ActionInputDescriptor("role", "Rol", FieldTypes.Enum, true) { Enum = RoleOptions.Select(o => o with { Tone = null }).ToList() },
+            ]),
+    };
 
     public ResourceDescriptor Descriptor => Definition;
 
@@ -169,5 +181,68 @@ public class UsersAdminResource(AppDbContext dbContext) : IAdminResource
     {
         if (AdminQueryExtensions.ParseId(id) is not { } userId) return null;
         return await Visible(dbContext).Where(u => u.Id == userId).Select(ToItem).FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Changes the role within the company. A company never runs out of Owners (409): its billing user (who pays the
+    /// subscription in Vexxen) stays Owner, since transferring the subscription is what hands the company over, and an
+    /// Owner can't be demoted if no other active Owner is left. Administrator is never set nor taken away here. Runs
+    /// under the company's lock, so two demotions at once can't leave it without Owners.
+    /// </summary>
+    public async Task<object> EditAsync(string id, IReadOnlyDictionary<string, object?> changes, CancellationToken cancellationToken)
+    {
+        var userId = AdminQueryExtensions.ParseId(id) ?? throw AdminApiException.NotFound($"{Key}/{id} doesn't exist");
+        var target = await Visible(dbContext)
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.EmpresaID })
+            .FirstOrDefaultAsync(cancellationToken) ?? throw AdminApiException.NotFound($"{Key}/{id} doesn't exist");
+
+        await companyLock.RunExclusiveAsync(target.EmpresaID, async ct =>
+        {
+            var user = await dbContext.Users.Include(u => u.Empresa).FirstAsync(u => u.Id == userId, ct);
+            foreach (var (field, value) in changes)
+            {
+                switch (field)
+                {
+                    case "role": await ChangeRoleAsync(user, (string)value!, ct); break;
+                    default: throw AdminApiException.InvalidInput($"{field} isn't editable", [new(field, "Not editable")]);
+                }
+            }
+            await dbContext.SaveChangesAsync(ct);
+            return null;
+        }, cancellationToken);
+
+        return await GetAsync(id, cancellationToken) ?? throw AdminApiException.NotFound($"{Key}/{id} doesn't exist");
+    }
+
+    private async Task ChangeRoleAsync(User user, string value, CancellationToken cancellationToken)
+    {
+        var role = RoleValues.GetValueOrDefault(value)
+                   ?? throw AdminApiException.InvalidInput($"Invalid role {value}", [new("role", $"Invalid option: {value}")]);
+        if (user.Rol == AppRoles.Administrator)
+            throw AdminApiException.Conflict("An EvalFlow administrator's role can't be changed from here.");
+        if (user.Rol == role) return;
+
+        if (user.Rol == AppRoles.Owner)
+        {
+            var billing = user.Empresa!.BillingVexxenUserId;
+            if (billing is not null && user.VexxenUserId == billing)
+            {
+                throw AdminApiException.Conflict(
+                    "This person pays the company's EvalFlow subscription: they stay Owner. Transfer the subscription in Vexxen to hand the company over.");
+            }
+
+            // Active: enabled and signed in with Vexxen (an invitation nobody has accepted doesn't run anything). A
+            // disabled or invited Owner can always be demoted: that doesn't take an active Owner away.
+            var isActiveOwner = user.Activo && user.VexxenUserId is not null;
+            if (isActiveOwner && !await dbContext.Users.AnyAsync(u => u.EmpresaID == user.EmpresaID && u.Id != user.Id
+                                                                  && u.Rol == AppRoles.Owner && u.Activo && u.VexxenUserId != null, cancellationToken))
+            {
+                throw AdminApiException.Conflict("The company would be left without an active Owner: make someone else Owner first.");
+            }
+        }
+
+        user.Rol = role;
+        user.FechaActualizacion = DateTime.UtcNow;
     }
 }

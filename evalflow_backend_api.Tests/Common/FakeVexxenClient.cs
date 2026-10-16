@@ -4,7 +4,8 @@ namespace evalflow_backend_api.Tests.Common;
 
 /// <summary>
 /// Vexxen in memory: users by access token, plans by Vexxen user id and refresh tokens that rotate. Set Down to
-/// simulate Vexxen being unavailable.
+/// simulate Vexxen being unavailable (AccessDown: only GET /api/access). SuspendedUserIds: accounts suspended from
+/// Vexxen Administrator (/api/access answers ACCOUNT_SUSPENDED; the refresh too if RefreshChecksSuspension).
 /// </summary>
 public class FakeVexxenClient : IVexxenClient
 {
@@ -13,6 +14,10 @@ public class FakeVexxenClient : IVexxenClient
     /// <summary>refresh token → Vexxen user id.</summary>
     public Dictionary<string, string> RefreshTokens { get; } = new();
     public HashSet<string> DeletedUserIds { get; } = new();
+    public HashSet<string> SuspendedUserIds { get; } = new();
+    public bool RefreshChecksSuspension { get; set; }
+    public bool AccessDown { get; set; }
+    public int AccountStatusCalls { get; private set; }
     public List<string> LoggedOut { get; } = new();
     public int AccessCalls { get; private set; }
     public bool Down { get; set; }
@@ -54,10 +59,20 @@ public class FakeVexxenClient : IVexxenClient
 
     public Task<VexxenAccess> GetAccessAsync(string vexxenUserId, CancellationToken cancellationToken)
     {
-        ThrowIfDown();
+        ThrowIfDown(AccessDown);
         AccessCalls++;
         if (DeletedUserIds.Contains(vexxenUserId)) throw new VexxenUserNotFoundException(vexxenUserId);
+        if (SuspendedUserIds.Contains(vexxenUserId)) throw new VexxenAccountSuspendedException(vexxenUserId);
         return Task.FromResult(AccessByUserId.TryGetValue(vexxenUserId, out var access) ? access : Access(null, "none"));
+    }
+
+    public Task<VexxenAccountStatus> GetAccountStatusAsync(string vexxenUserId, CancellationToken cancellationToken)
+    {
+        ThrowIfDown(AccessDown);
+        AccountStatusCalls++;
+        return Task.FromResult(DeletedUserIds.Contains(vexxenUserId) ? VexxenAccountStatus.Deleted
+            : SuspendedUserIds.Contains(vexxenUserId) ? VexxenAccountStatus.Suspended
+            : VexxenAccountStatus.Active);
     }
 
     public Task<VexxenTokens> RefreshAsync(string refreshToken, CancellationToken cancellationToken)
@@ -65,6 +80,7 @@ public class FakeVexxenClient : IVexxenClient
         ThrowIfDown();
         if (!RefreshTokens.Remove(refreshToken, out var userId) || DeletedUserIds.Contains(userId))
             throw new VexxenUnauthorizedException("expired");
+        if (RefreshChecksSuspension && SuspendedUserIds.Contains(userId)) throw new VexxenAccountSuspendedException();
         var user = UsersByAccessToken.Values.First(u => u.Id == userId);
         var accessToken = $"access-{userId}-{Guid.NewGuid():N}";
         UsersByAccessToken[accessToken] = user;
@@ -79,8 +95,8 @@ public class FakeVexxenClient : IVexxenClient
         return Task.CompletedTask;
     }
 
-    private void ThrowIfDown()
+    private void ThrowIfDown(bool alsoIf = false)
     {
-        if (Down) throw new VexxenUnavailableException("Vexxen is down");
+        if (Down || alsoIf) throw new VexxenUnavailableException("Vexxen is down");
     }
 }

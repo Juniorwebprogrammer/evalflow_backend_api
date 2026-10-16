@@ -11,11 +11,12 @@ EvalFlow no guarda contraseñas: las cuentas, la verificación del email, el 2FA
 | Endpoint | Qué hace |
 | --- | --- |
 | `POST /Auth/vexxen` `{ accessToken }` | El access token del popup de Vexxen. Si la persona pertenece a una empresa: `{ status: "signed_in", jwt, … }` (el JWT de siempre: `sub`, `email`, `identificationId`, `role`). Si no: `{ status: "needs_onboarding", email, hasPlan, catalogUrl }`. |
-| `POST /Auth/refresh` `{ refreshToken }` | Renueva la sesión **en Vexxen** con su refresh token (el frontend lo guarda en `ef_refresh`) y devuelve un JWT nuevo y el refresh token nuevo (el anterior deja de valer). Si cambia la contraseña o se borra la cuenta en Vexxen, la sesión de EvalFlow termina. |
+| `POST /Auth/refresh` `{ refreshToken }` | Renueva la sesión **en Vexxen** con su refresh token (el frontend lo guarda en `ef_refresh`) y devuelve un JWT nuevo y el refresh token nuevo (el anterior deja de valer). Si cambia la contraseña, se suspende o se borra la cuenta en Vexxen, la sesión de EvalFlow termina (y el refresh token nuevo se revoca). |
 | `POST /Auth/logout` `{ refreshToken }` | Revoca el refresh token en Vexxen. Siempre 204. |
 
 - El nombre y el email se copian de Vexxen en cada inicio de sesión.
-- Errores con `code`: `INVALID_VEXXEN_SESSION` (401), `NOT_A_MEMBER` (401), `USER_INACTIVE` (403), `INVITATION_EXPIRED` (403), `VEXXEN_UNAVAILABLE` (503).
+- Antes de emitir el JWT (inicio de sesión, renovación y alta de la empresa) se pregunta a Vexxen si la cuenta sigue activa (`GET /api/access/{userId}`): suspendida → `ACCOUNT_SUSPENDED` (403 al entrar, 401 al renovar); borrada → `INVALID_VEXXEN_SESSION`. Si Vexxen no contesta a esa comprobación, la sesión sigue (queda un aviso en el log).
+- Errores con `code`: `INVALID_VEXXEN_SESSION` (401), `NOT_A_MEMBER` (401), `ACCOUNT_SUSPENDED` (403 / 401), `USER_INACTIVE` (403), `INVITATION_EXPIRED` (403), `VEXXEN_UNAVAILABLE` (503).
 - Los flujos antiguos (login con contraseña, 2FA, verificación del email, recuperar/cambiar contraseña, `PUT /Profile/update` y el `accept-invite` con contraseña) responden **410 `USE_VEXXEN`**.
 
 ### Empresas, invitaciones y planes
@@ -43,22 +44,23 @@ dotnet run -- create-admin <email> <nombre> <apellidos>
 
 ## Admin API (Vexxen Administrator)
 
-`/admin/v1` es la Admin API que lee y usa **Vexxen Administrator** (la app de escritorio), según el contrato v1.1 (`docs/admin-contract-v1.md` del repo vexxen-administrator). `app.id` = `evalflow`.
+`/admin/v1` es la Admin API que lee y usa **Vexxen Administrator** (la app de escritorio), según el contrato v1.2 (`docs/admin-contract-v1.md` del repo vexxen-administrator). `app.id` = `evalflow`.
 
 | Endpoint | Qué hace |
 | --- | --- |
-| `GET /admin/v1/manifest` | Recursos, campos, filtros y relaciones. Las acciones solo aparecen si el token puede escribir. |
+| `GET /admin/v1/manifest` | Recursos, campos, filtros y relaciones. Las acciones y `edit` solo aparecen si el token puede escribir. |
 | `GET /admin/v1/health` | Siempre 200; el estado (`ok` / `down`) y la latencia de la base de datos van en el cuerpo. |
 | `GET /admin/v1/stats` | Empresas (total, por plan y sin plan), usuarios, ciclos activos, evaluaciones completadas en 30 días y emails fallidos/pendientes. |
 | `GET /admin/v1/{resource}` | Lista con `page`, `pageSize` (máx. 100), `q`, `sort` y los filtros del manifest. Un filtro u orden desconocido es `400 invalid_query`. |
 | `GET /admin/v1/{resource}/{id}` | Ficha: `{ item }`. |
-| `POST /admin/v1/{resource}/{id}/actions/{action}` | `{ inputs }` → `{ item }`. Hoy: `companies` / `set-plan` (`planId`: `starter`, `professional`, `enterprise` o `vexxen_sync` para volver a la suscripción de Vexxen), lo mismo que `PUT /Company/{identificationId}/plan`. |
+| `POST /admin/v1/{resource}/{id}/actions/{action}` | `{ inputs }` → `{ item }`. Hoy: `companies` / `set-plan` (`planId`: `starter`, `professional`, `enterprise` o `vexxen_sync` para volver a la suscripción de Vexxen), lo mismo que `PUT /Company/{identificationId}/plan`; `email-outbox` / `retry`. |
+| `PATCH /admin/v1/{resource}/{id}` | `{ changes }` → `{ item }`, solo con los campos de `edit.inputs`. `companies`: `name`, `cif`, `fiscalAddress`, `sector`. `users`: `role` (`owner`, `rrhh`, `superior`, `employee`; nunca Administrator). `409 conflict` si deja la empresa sin Owner activo o rebaja al Owner que paga la suscripción. |
 
 Recursos: `companies`, `users`, `evaluation-cycles` y `email-outbox`. La empresa interna (`evalflow-internal`) y sus usuarios (los Administrators) no aparecen ni cuentan en las estadísticas. Nunca se devuelven tokens de invitación, el cuerpo cifrado de los emails ni otros secretos.
 
-**Autenticación.** Solo con el access token de Vexxen Administrator (esquema JWT `VexxenAdmin`, aparte del JWT de EvalFlow): ES256, `typ` `at+jwt`, `iss` = `VexxenAdmin:Issuer` (las claves se descubren en `{issuer}/.well-known/openid-configuration`), `aud` = `VexxenAdmin:Audience`, `exp`/`nbf` con 60 s de tolerancia. Después: `403 forbidden` sin scope `admin:read` o sin permisos, `403 unsupported_grant` si algún permiso tiene `tenant`, y las acciones necesitan además el scope `admin:write` y el rol `operator`. No pide `X-Api-Key` ni usa CORS. El JWT de EvalFlow no abre `/admin/v1` y el token de administración no abre el resto de la API.
+**Autenticación.** Solo con el access token de Vexxen Administrator (esquema JWT `VexxenAdmin`, aparte del JWT de EvalFlow): ES256, `typ` `at+jwt`, `iss` = `VexxenAdmin:Issuer` (las claves se descubren en `{issuer}/.well-known/openid-configuration`), `aud` = `VexxenAdmin:Audience`, `exp`/`nbf` con 60 s de tolerancia. Después: `403 forbidden` sin scope `admin:read` o sin permisos, `403 unsupported_grant` si algún permiso tiene `tenant`, y las acciones y la edición necesitan además el scope `admin:write` y el rol `operator`. No pide `X-Api-Key` ni usa CORS. El JWT de EvalFlow no abre `/admin/v1` y el token de administración no abre el resto de la API.
 
-Todas las respuestas llevan `Cache-Control: no-store` y `X-Request-Id` (el que llega o uno nuevo); los errores son `application/problem+json` con `code` y `requestId`. Cada petición y cada acción quedan en el log (`[admin-api]`, con `sub`, email, ruta, query o inputs).
+Todas las respuestas llevan `Cache-Control: no-store` y `X-Request-Id` (el que llega o uno nuevo); los errores son `application/problem+json` con `code` y `requestId`. Cada petición, acción y edición quedan en el log (`[admin-api]`, con `sub`, email, ruta, query, inputs o, por campo, el valor anterior y el nuevo).
 
 | Variable | Por defecto | Qué es |
 | --- | --- | --- |

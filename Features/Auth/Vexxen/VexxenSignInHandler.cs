@@ -23,6 +23,9 @@ public class VexxenSignInHandler(IVexxenClient vexxen, VexxenSessionService sess
         {
             var vexxenUser = await vexxen.GetUserInfoAsync(request.AccessToken, cancellationToken);
 
+            var accountError = await sessions.CheckAccountAsync(vexxenUser.Id, StatusCodes.Status403Forbidden, cancellationToken);
+            if (accountError is not null) return accountError;
+
             var (user, error) = await sessions.FindOrLinkAsync(vexxenUser, cancellationToken);
             if (error is not null) return error;
 
@@ -41,6 +44,10 @@ public class VexxenSignInHandler(IVexxenClient vexxen, VexxenSessionService sess
         {
             return VexxenErrors.InvalidSession();
         }
+        catch (VexxenAccountSuspendedException)
+        {
+            return VexxenErrors.Suspended(StatusCodes.Status403Forbidden);
+        }
         catch (VexxenException)
         {
             return VexxenErrors.Unavailable();
@@ -49,10 +56,11 @@ public class VexxenSignInHandler(IVexxenClient vexxen, VexxenSessionService sess
 }
 
 /// <summary>
-/// Renews the session at Vexxen (so a password change or a deleted account there ends it here too) and issues a
-/// new EvalFlow JWT with the plan re-read. Returns the new Vexxen refresh token: the old one no longer works.
+/// Renews the session at Vexxen (so a password change, a suspension or a deleted account there ends it here too) and
+/// issues a new EvalFlow JWT with the plan re-read. Returns the new Vexxen refresh token: the old one no longer works.
 /// </summary>
-public class RefreshSessionHandler(IVexxenClient vexxen, VexxenSessionService sessions) : IRequestHandler<RefreshSessionRecord, IResult>
+public class RefreshSessionHandler(IVexxenClient vexxen, VexxenSessionService sessions, ILogger<RefreshSessionHandler> logger)
+    : IRequestHandler<RefreshSessionRecord, IResult>
 {
     public async Task<IResult> Handle(RefreshSessionRecord request, CancellationToken cancellationToken)
     {
@@ -62,6 +70,15 @@ public class RefreshSessionHandler(IVexxenClient vexxen, VexxenSessionService se
         {
             var tokens = await vexxen.RefreshAsync(request.RefreshToken, cancellationToken);
             var vexxenUser = await vexxen.GetUserInfoAsync(tokens.AccessToken, cancellationToken);
+
+            // Suspended or deleted since the last refresh: the session ends here, and the refresh token Vexxen has just
+            // issued is revoked (the one the frontend sent is already spent).
+            var accountError = await sessions.CheckAccountAsync(vexxenUser.Id, StatusCodes.Status401Unauthorized, cancellationToken);
+            if (accountError is not null)
+            {
+                await RevokeAsync(tokens.RefreshToken);
+                return accountError;
+            }
 
             var (user, error) = await sessions.FindOrLinkAsync(vexxenUser, cancellationToken);
             if (error is not null) return error;
@@ -78,9 +95,28 @@ public class RefreshSessionHandler(IVexxenClient vexxen, VexxenSessionService se
         {
             return VexxenErrors.InvalidSession();
         }
+        catch (VexxenAccountSuspendedException)
+        {
+            // Vexxen itself refused to renew it: there's no new refresh token to revoke.
+            return VexxenErrors.Suspended(StatusCodes.Status401Unauthorized);
+        }
         catch (VexxenException)
         {
             return VexxenErrors.Unavailable();
+        }
+    }
+
+    // Best effort: if Vexxen doesn't answer, the token stays unused in the frontend's cookie, and the next refresh with
+    // it is checked again.
+    private async Task RevokeAsync(string refreshToken)
+    {
+        try
+        {
+            await vexxen.LogoutAsync(refreshToken, CancellationToken.None);
+        }
+        catch (VexxenException ex)
+        {
+            logger.LogWarning(ex, "Couldn't revoke the Vexxen refresh token of a suspended or deleted account");
         }
     }
 }

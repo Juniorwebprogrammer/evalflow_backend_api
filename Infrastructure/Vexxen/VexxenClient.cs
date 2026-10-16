@@ -9,6 +9,7 @@ namespace evalflow_backend_api.Infrastructure.Vexxen;
 public class VexxenClient(HttpClient httpClient, IOptions<VexxenSettings> options, ILogger<VexxenClient> logger) : IVexxenClient
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private const string AccountSuspended = "ACCOUNT_SUSPENDED";
     private readonly VexxenSettings _settings = options.Value;
 
     public async Task<VexxenUser> GetUserInfoAsync(string accessToken, CancellationToken cancellationToken)
@@ -30,7 +31,26 @@ public class VexxenClient(HttpClient httpClient, IOptions<VexxenSettings> option
 
         if (response.StatusCode == HttpStatusCode.NotFound && await CodeOf(response, cancellationToken) == "USER_NOT_FOUND")
             throw new VexxenUserNotFoundException(vexxenUserId);
+        if (response.StatusCode == HttpStatusCode.Forbidden && await CodeOf(response, cancellationToken) == AccountSuspended)
+            throw new VexxenAccountSuspendedException(vexxenUserId);
         return await ReadAsync<VexxenAccess>(response, cancellationToken);
+    }
+
+    public async Task<VexxenAccountStatus> GetAccountStatusAsync(string vexxenUserId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await GetAccessAsync(vexxenUserId, cancellationToken);
+            return VexxenAccountStatus.Active;
+        }
+        catch (VexxenAccountSuspendedException)
+        {
+            return VexxenAccountStatus.Suspended;
+        }
+        catch (VexxenUserNotFoundException)
+        {
+            return VexxenAccountStatus.Deleted;
+        }
     }
 
     public async Task<VexxenTokens> RefreshAsync(string refreshToken, CancellationToken cancellationToken)
@@ -40,8 +60,11 @@ public class VexxenClient(HttpClient httpClient, IOptions<VexxenSettings> option
         using var response = await SendAsync(request, cancellationToken);
 
         // 401: caducado, revocado (cambio de contraseña, logout) o de otro cliente. 400: ni siquiera es un token.
-        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.BadRequest)
+        // 404: la cuenta se borró. 403 ACCOUNT_SUSPENDED: la cuenta está suspendida (Vexxen ya no renueva su sesión).
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.BadRequest or HttpStatusCode.NotFound)
             throw new VexxenUnauthorizedException("The Vexxen session has expired");
+        if (response.StatusCode == HttpStatusCode.Forbidden && await CodeOf(response, cancellationToken) == AccountSuspended)
+            throw new VexxenAccountSuspendedException();
         return await ReadAsync<VexxenTokens>(response, cancellationToken);
     }
 

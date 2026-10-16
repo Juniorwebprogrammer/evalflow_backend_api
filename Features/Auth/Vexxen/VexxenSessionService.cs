@@ -18,13 +18,46 @@ public record VexxenSessionResponse(
     string PlanStatus);
 
 /// <summary>
-/// What sign-in and refresh share: find the EvalFlow user of a Vexxen account (linking a pending invitation the
-/// first time), copy their identity from Vexxen, sync the company plan and issue the usual EvalFlow JWT
-/// (sub, email, identificationId, role).
+/// What sign-in and refresh share: check that the Vexxen account isn't suspended or deleted, find the EvalFlow user
+/// of a Vexxen account (linking a pending invitation the first time), copy their identity from Vexxen, sync the company
+/// plan and issue the usual EvalFlow JWT (sub, email, identificationId, role).
 /// </summary>
-public class VexxenSessionService(AppDbContext dbContext, IJwtProvider jwtProvider, IPlanSyncService planSync)
+public class VexxenSessionService(AppDbContext dbContext, IJwtProvider jwtProvider, IPlanSyncService planSync, IVexxenClient vexxen,
+    ILogger<VexxenSessionService> logger)
 {
     public const string SignedIn = "signed_in";
+
+    /// <summary>
+    /// Asks Vexxen whether the account can still be used (GET /api/access/{userId}): Vexxen's userinfo doesn't look at
+    /// suspensions, and an access token outlives the suspension by a few minutes. Suspended → ACCOUNT_SUSPENDED with
+    /// <paramref name="suspendedStatus"/>; deleted → INVALID_VEXXEN_SESSION (401). If Vexxen doesn't answer, nobody is
+    /// locked out: the session goes ahead (with a warning in the log).
+    /// </summary>
+    public async Task<IResult?> CheckAccountAsync(string vexxenUserId, int suspendedStatus, CancellationToken cancellationToken)
+    {
+        VexxenAccountStatus status;
+        try
+        {
+            status = await vexxen.GetAccountStatusAsync(vexxenUserId, cancellationToken);
+        }
+        catch (VexxenUnavailableException ex)
+        {
+            logger.LogWarning(ex, "Couldn't check whether Vexxen account {VexxenUserId} is suspended; letting the session through", vexxenUserId);
+            return null;
+        }
+
+        switch (status)
+        {
+            case VexxenAccountStatus.Suspended:
+                logger.LogInformation("Vexxen account {VexxenUserId} is suspended: no EvalFlow session", vexxenUserId);
+                return VexxenErrors.Suspended(suspendedStatus);
+            case VexxenAccountStatus.Deleted:
+                logger.LogInformation("Vexxen account {VexxenUserId} was deleted: no EvalFlow session", vexxenUserId);
+                return VexxenErrors.InvalidSession();
+            default:
+                return null;
+        }
+    }
 
     /// <summary>
     /// The user linked to this Vexxen account. If there's none, an invited user with the same email (Vexxen only

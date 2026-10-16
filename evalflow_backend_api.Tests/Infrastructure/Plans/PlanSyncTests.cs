@@ -123,6 +123,19 @@ public class PlanSyncTests
     }
 
     [Fact]
+    public async Task Sync_WhenTheBillingUserIsSuspended_KeepsTheLastKnownPlan()
+    {
+        var (sut, vexxen, company, db) = await SetupAsync();
+        vexxen.SuspendedUserIds.Add("vx-owner");
+
+        await sut.SyncAsync(company, CancellationToken.None);
+
+        var saved = await db.Companies.AsNoTracking().SingleAsync();
+        saved.PlanStatus.Should().Be(PlanStatuses.Active);
+        saved.PlanSyncedAt.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Sync_TransferredToAMember_MakesThemOwnerAndBillingUser_AndThePreviousOwnerHR()
     {
         var (sut, vexxen, company, db) = await SetupAsync();

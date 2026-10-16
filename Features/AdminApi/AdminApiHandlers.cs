@@ -44,7 +44,7 @@ public class GetAdminManifestHandler(AdminResourceCatalog catalog, AdminAppInfoP
     public Task<IResult> Handle(GetAdminManifestRecord request, CancellationToken cancellationToken)
     {
         var resources = catalog.All
-            .Select(r => request.CanWrite ? r.Descriptor : r.Descriptor with { Actions = [] })
+            .Select(r => request.CanWrite ? r.Descriptor : r.Descriptor with { Actions = [], Edit = null })
             .ToList();
         return Task.FromResult(Results.Ok(new AdminManifest(AdminContract.ContractVersion, appInfo.Get(), resources)));
     }
@@ -211,5 +211,58 @@ public class RunAdminActionHandler(AdminResourceCatalog catalog, ILogger<RunAdmi
             _ => value.GetRawText(),
         };
         return text is not null && appliesTo.Values.Contains(text);
+    }
+}
+
+/// <summary>
+/// Edits a record (contract §13.2): admin:write and an operator grant (403), resource with edit (404), the changes
+/// (400 invalid_input), the record (404), then the resource's own rules (409). Every edit goes to the log with who, the
+/// record and, per field, the value before and after.
+/// </summary>
+public class EditAdminResourceItemHandler(AdminResourceCatalog catalog, ILogger<EditAdminResourceItemHandler> logger)
+    : IRequestHandler<EditAdminResourceItemRecord, IResult>
+{
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    public async Task<IResult> Handle(EditAdminResourceItemRecord request, CancellationToken cancellationToken)
+    {
+        var caller = request.Caller;
+        var access = caller.CheckWrite();
+        if (!access.Allowed) throw new AdminApiException(StatusCodes.Status403Forbidden, access.Code!, access.Detail!);
+
+        var resource = catalog.Require(request.Resource);
+        var edit = resource.Descriptor.Edit ?? throw AdminApiException.NotFound($"{request.Resource} can't be edited");
+
+        var changes = AdminEditChanges.Validate(edit, request.Body);
+        var before = await resource.GetAsync(request.Id, cancellationToken)
+                     ?? throw AdminApiException.NotFound($"{request.Resource}/{request.Id} doesn't exist");
+
+        logger.LogInformation("[admin-api] edit {RequestId} sub={Sub} email={Email} {Resource}/{Id} changes={Changes}",
+            request.RequestId, caller.Sub, caller.Email, request.Resource, request.Id, JsonSerializer.Serialize(changes, Json));
+
+        try
+        {
+            var item = await resource.EditAsync(request.Id, changes, cancellationToken);
+            logger.LogInformation("[admin-api] edit {RequestId} sub={Sub} email={Email} {Resource}/{Id} done: {Diff}",
+                request.RequestId, caller.Sub, caller.Email, request.Resource, request.Id, Diff(before, item, changes.Keys));
+            return Results.Ok(new AdminItemResponse(item));
+        }
+        catch (AdminApiException ex)
+        {
+            logger.LogWarning("[admin-api] edit {RequestId} {Resource}/{Id} rejected: {Code} {Detail}",
+                request.RequestId, request.Resource, request.Id, ex.Code, ex.Message);
+            throw;
+        }
+    }
+
+    /// <summary>{ "field": { "from": old, "to": new } } for each field edited, read from the item before and after.</summary>
+    public static string Diff(object before, object after, IEnumerable<string> keys)
+    {
+        var old = JsonSerializer.SerializeToElement(before, before.GetType(), Json);
+        var now = JsonSerializer.SerializeToElement(after, after.GetType(), Json);
+        var diff = keys.ToDictionary(key => key, key => new { From = Value(old, key), To = Value(now, key) });
+        return JsonSerializer.Serialize(diff, Json);
+
+        static JsonElement? Value(JsonElement item, string key) => item.TryGetProperty(key, out var value) ? value : null;
     }
 }

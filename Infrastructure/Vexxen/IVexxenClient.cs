@@ -2,7 +2,8 @@ namespace evalflow_backend_api.Infrastructure.Vexxen;
 
 /// <summary>
 /// La API de Vexxen, como la usa @vexxen/auth: cabeceras X-Client-Id / X-Api-Key y, para el usuario, su access token.
-/// Lanza VexxenUnauthorizedException, VexxenUserNotFoundException o VexxenUnavailableException.
+/// Lanza VexxenUnauthorizedException, VexxenAccountSuspendedException, VexxenUserNotFoundException o
+/// VexxenUnavailableException.
 /// </summary>
 public interface IVexxenClient
 {
@@ -10,6 +11,12 @@ public interface IVexxenClient
 
     /// <summary>El acceso del usuario al producto de EvalFlow (su plan).</summary>
     Task<VexxenAccess> GetAccessAsync(string vexxenUserId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Si la cuenta sigue activa, está suspendida o se borró (el mismo GET /api/access/{userId}). Si Vexxen no
+    /// contesta o falla, VexxenUnavailableException: quien llama decide si deja pasar.
+    /// </summary>
+    Task<VexxenAccountStatus> GetAccountStatusAsync(string vexxenUserId, CancellationToken cancellationToken);
 
     /// <summary>Renueva la sesión: el refresh token se gasta y llega otro par.</summary>
     Task<VexxenTokens> RefreshAsync(string refreshToken, CancellationToken cancellationToken);

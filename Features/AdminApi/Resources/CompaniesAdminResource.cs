@@ -31,7 +31,8 @@ public sealed record CompanyAdminItem(
 /// <summary>
 /// The client companies, with their plan (from Vexxen, or set by hand) and how many users they have. The internal
 /// company of the administrators (evalflow-internal) is left out. Action set-plan: the same as
-/// PUT /Company/{identificationId}/plan (<see cref="ChangeCompanyPlanHandler"/>).
+/// PUT /Company/{identificationId}/plan (<see cref="ChangeCompanyPlanHandler"/>). Edit: name, CIF, fiscal address and
+/// sector.
 /// </summary>
 public class CompaniesAdminResource(AppDbContext dbContext, ISender sender) : IAdminResource
 {
@@ -104,7 +105,19 @@ public class CompaniesAdminResource(AppDbContext dbContext, ISender sender) : IA
                         Enum = [.. PlanOptions.Select(o => o with { Tone = null }), new EnumOption(ReturnToVexxen, "Volver a la suscripción de Vexxen")],
                     },
                 ]),
-        ]);
+        ])
+    {
+        // Only what describes the company, as its Owner/HR edit it in the app (PUT /Company/update). Not the plan
+        // (set-plan), the identificationId (the tenant key in every JWT and URL), the billing user (Vexxen's
+        // subscription decides it) nor the branding (logo, colours), which isn't in the record.
+        Edit = new EditDescriptor(null,
+        [
+            new ActionInputDescriptor("name", "Nombre", FieldTypes.String, true) { MaxLength = 40 },
+            new ActionInputDescriptor("cif", "CIF", FieldTypes.String, true) { MaxLength = 15 },
+            new ActionInputDescriptor("fiscalAddress", "Dirección fiscal", FieldTypes.String, false) { MaxLength = 150 },
+            new ActionInputDescriptor("sector", "Sector", FieldTypes.String, false) { MaxLength = 50 },
+        ]),
+    };
 
     public ResourceDescriptor Descriptor => Definition;
 
@@ -214,6 +227,32 @@ public class CompaniesAdminResource(AppDbContext dbContext, ISender sender) : IA
                 ? AdminApiException.NotFound($"{Key}/{id} doesn't exist")
                 : AdminApiException.Conflict($"The plan couldn't be changed ({failed.StatusCode})");
         }
+
+        return await FindAsync(id, cancellationToken) ?? throw AdminApiException.NotFound($"{Key}/{id} doesn't exist");
+    }
+
+    public async Task<object> EditAsync(string id, IReadOnlyDictionary<string, object?> changes, CancellationToken cancellationToken)
+    {
+        var companyId = AdminQueryExtensions.ParseId(id) ?? throw AdminApiException.NotFound($"{Key}/{id} doesn't exist");
+        var company = await dbContext.Companies
+            .FirstOrDefaultAsync(c => c.Id == companyId && c.IdentificationId != CreateAdministratorCommand.InternalCompanyId, cancellationToken)
+            ?? throw AdminApiException.NotFound($"{Key}/{id} doesn't exist");
+
+        foreach (var (field, value) in changes)
+        {
+            var text = (string?)value;
+            switch (field)
+            {
+                case "name": company.Nombre = text!; break;
+                case "cif": company.Cif = text!; break;
+                case "fiscalAddress": company.DireccionFiscal = text; break;
+                // Not nullable in the database: empty is "".
+                case "sector": company.Sector = text ?? ""; break;
+                default: throw AdminApiException.InvalidInput($"{field} isn't editable", [new(field, "Not editable")]);
+            }
+        }
+        company.FechaActualizacion = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         return await FindAsync(id, cancellationToken) ?? throw AdminApiException.NotFound($"{Key}/{id} doesn't exist");
     }

@@ -6,12 +6,12 @@ public sealed record AdminListResult(IReadOnlyList<object> Items, int Total);
 
 /// <summary>
 /// A resource of the Admin API (companies, users…): its descriptor for the manifest, its list (the query already
-/// validated against the descriptor), its detail and its actions. Items are records serialized in camelCase with the
+/// validated against the descriptor), its detail, its actions and its edit. Items are records serialized in camelCase with the
 /// keys of the descriptor's fields, plus id. Never secrets: no tokens, API keys, password hashes or encrypted data.
 /// </summary>
 public interface IAdminResource
 {
-    /// <summary>With its actions; the manifest drops them for callers that can't write.</summary>
+    /// <summary>With its actions and edit; the manifest drops them for callers that can't write.</summary>
     ResourceDescriptor Descriptor { get; }
 
     Task<AdminListResult> ListAsync(AdminListQuery query, CancellationToken cancellationToken);
@@ -22,6 +22,14 @@ public interface IAdminResource
     /// <summary>Runs an action declared in the descriptor, with its inputs already validated. Returns the updated item.</summary>
     Task<object> RunActionAsync(string action, string id, IReadOnlyDictionary<string, object?> inputs, CancellationToken cancellationToken) =>
         throw AdminApiException.NotFound($"{Descriptor.Key} has no action {action}");
+
+    /// <summary>
+    /// Applies the fields of PATCH /{resource}/{id}, already validated against Descriptor.Edit (only the ones given;
+    /// null empties an optional one). 404 if the record doesn't exist, 409 if the change breaks a rule. Returns the
+    /// updated item.
+    /// </summary>
+    Task<object> EditAsync(string id, IReadOnlyDictionary<string, object?> changes, CancellationToken cancellationToken) =>
+        throw AdminApiException.NotFound($"{Descriptor.Key} can't be edited");
 }
 
 /// <summary>Every resource, in manifest order.</summary>

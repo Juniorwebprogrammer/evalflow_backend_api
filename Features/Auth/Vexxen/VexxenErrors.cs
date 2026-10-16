@@ -10,6 +10,12 @@ public static class VexxenErrors
     public static IResult Unavailable() =>
         Error(StatusCodes.Status503ServiceUnavailable, "VEXXEN_UNAVAILABLE", "No podemos conectar con Vexxen. Inténtalo de nuevo en unos minutos.");
 
+    /// <summary>
+    /// The Vexxen account is suspended: no EvalFlow session (403 on sign-in, 401 on refresh, where the session ends).
+    /// </summary>
+    public static IResult Suspended(int status) =>
+        Error(status, "ACCOUNT_SUSPENDED", "Tu cuenta de Vexxen está suspendida. Si crees que es un error, contacta con soporte.");
+
     public static IResult InvalidSession() =>
         Error(StatusCodes.Status401Unauthorized, "INVALID_VEXXEN_SESSION", "Tu sesión de Vexxen no es válida o ha caducado. Vuelve a iniciar sesión.");
 }

@@ -166,6 +166,45 @@ public class VexxenSignInEndpointTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task SuspendedAccount_CantSignIn()
+    {
+        await SeedMemberAsync();
+        // Vexxen's userinfo still accepts the access token for a few minutes after the suspension.
+        var token = Vexxen.AddUser(FakeVexxenClient.User("vx-ana", "ana@acme.com"));
+        Vexxen.SuspendedUserIds.Add("vx-ana");
+
+        var response = await SignIn(token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("ACCOUNT_SUSPENDED");
+    }
+
+    [Fact]
+    public async Task SuspendedPersonWithoutCompany_DoesntGoToOnboarding()
+    {
+        var token = Vexxen.AddUser(FakeVexxenClient.User("vx-new", "new@acme.com"), "starter");
+        Vexxen.SuspendedUserIds.Add("vx-new");
+
+        var response = await SignIn(token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("ACCOUNT_SUSPENDED");
+    }
+
+    [Fact]
+    public async Task SignIn_WhenTheSuspensionCheckCantReachVexxen_LetsTheMemberIn()
+    {
+        await SeedMemberAsync();
+        var token = Vexxen.AddUser(FakeVexxenClient.User("vx-ana", "ana@acme.com"));
+        Vexxen.AccessDown = true;
+
+        var response = await SignIn(token);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<VexxenSessionResponse>())!.Status.Should().Be("signed_in");
+    }
+
+    [Fact]
     public async Task CompanyWithoutPlan_CanStillSignIn_ReadOnly()
     {
         await SeedMemberAsync(planStatus: PlanStatuses.None, billing: null);
@@ -250,13 +289,75 @@ public class VexxenSessionEndpointTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Refresh_ChecksThatTheVexxenAccountIsntSuspended()
+    {
+        await SeedMemberAsync();
+        var refreshToken = Vexxen.AddRefreshToken("vx-ana");
+
+        (await Refresh(refreshToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        Vexxen.AccountStatusCalls.Should().Be(1);
+        Vexxen.LoggedOut.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Refresh_AfterTheVexxenAccountIsSuspended_EndsTheSession_AndRevokesTheNewRefreshToken()
+    {
+        await SeedMemberAsync();
+        var refreshToken = Vexxen.AddRefreshToken("vx-ana");
+        Vexxen.SuspendedUserIds.Add("vx-ana");
+
+        var response = await Refresh(refreshToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be("ACCOUNT_SUSPENDED");
+        // The token the frontend sent was spent by the refresh; the pair Vexxen issued with it is revoked straight away.
+        var revoked = Vexxen.LoggedOut.Should().ContainSingle().Which;
+        revoked.Should().NotBe(refreshToken);
+        Vexxen.RefreshTokens.Should().BeEmpty("no refresh token of the suspended account is left alive");
+    }
+
+    [Fact]
+    public async Task Refresh_WhenVexxenItselfRefusesASuspendedAccount_Returns401Suspended()
+    {
+        await SeedMemberAsync();
+        var refreshToken = Vexxen.AddRefreshToken("vx-ana");
+        Vexxen.SuspendedUserIds.Add("vx-ana");
+        Vexxen.RefreshChecksSuspension = true;
+
+        var response = await Refresh(refreshToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("ACCOUNT_SUSPENDED");
+    }
+
+    [Fact]
+    public async Task Refresh_WhenTheSuspensionCheckCantReachVexxen_StillRenewsTheSession()
+    {
+        await SeedMemberAsync();
+        var refreshToken = Vexxen.AddRefreshToken("vx-ana");
+        Vexxen.AccessDown = true;
+
+        var response = await Refresh(refreshToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var session = (await response.Content.ReadFromJsonAsync<VexxenSessionResponse>())!;
+        session.Jwt.Should().NotBeNullOrEmpty();
+        session.RefreshToken.Should().NotBeNullOrEmpty();
+        Vexxen.LoggedOut.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Refresh_AfterTheVexxenAccountIsDeleted_EndsTheSession()
     {
         await SeedMemberAsync();
         var refreshToken = Vexxen.AddRefreshToken("vx-ana");
         Vexxen.DeletedUserIds.Add("vx-ana");
 
-        (await Refresh(refreshToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var response = await Refresh(refreshToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("INVALID_VEXXEN_SESSION");
     }
 
     [Fact]

@@ -8,8 +8,8 @@ using MediatR;
 namespace evalflow_backend_api.Features.AdminApi;
 
 /// <summary>
-/// The Admin API for Vexxen Administrator (contract v1.1, docs/admin-contract-v1.md in the vexxen-administrator
-/// repo): manifest, health, stats, the list and detail of each resource and their actions. Only the VexxenAdmin
+/// The Admin API for Vexxen Administrator (contract v1.2, docs/admin-contract-v1.md in the vexxen-administrator
+/// repo): manifest, health, stats, the list and detail of each resource, their actions and their edit. Only the VexxenAdmin
 /// scheme authenticates here (no X-Api-Key, no EvalFlow JWT, no CORS: the caller is the desktop app's main process).
 /// </summary>
 public static class AdminApiEndpoints
@@ -53,6 +53,10 @@ public static class AdminApiEndpoints
         group.MapGet("/{resource}/{id}", (string resource, string id, ISender sender) =>
             sender.Send(new GetAdminResourceItemRecord(resource, id)));
 
+        group.MapPatch("/{resource}/{id}", async (string resource, string id, HttpContext context, ISender sender) =>
+            await sender.Send(new EditAdminResourceItemRecord(resource, id, await ReadBodyAsync(context.Request),
+                AdminCaller.From(context), AdminRequestId.Get(context))));
+
         group.MapPost("/{resource}/{id}/actions/{action}", async (string resource, string id, string action, HttpContext context, ISender sender) =>
             await sender.Send(new RunAdminActionRecord(resource, id, action, await ReadBodyAsync(context.Request),
                 AdminCaller.From(context), AdminRequestId.Get(context))));
@@ -63,7 +67,7 @@ public static class AdminApiEndpoints
 
     private const int MaxBodyBytes = 64 * 1024;
 
-    // Read by hand so a malformed body is a 400 invalid_input (contract §12.3), not the framework's own 400.
+    // Read by hand so a malformed body is a 400 invalid_input (contract §12.3, §13.2), not the framework's own 400.
     private static async Task<JsonElement?> ReadBodyAsync(HttpRequest request)
     {
         if (request.ContentLength > MaxBodyBytes) throw TooLarge();
@@ -85,7 +89,7 @@ public static class AdminApiEndpoints
         }
         catch (JsonException)
         {
-            throw AdminApiException.InvalidInput("The body isn't valid JSON: { \"inputs\": { … } }", [new("body", "Invalid JSON")]);
+            throw AdminApiException.InvalidInput("The body isn't valid JSON", [new("body", "Invalid JSON")]);
         }
 
         static AdminApiException TooLarge() =>

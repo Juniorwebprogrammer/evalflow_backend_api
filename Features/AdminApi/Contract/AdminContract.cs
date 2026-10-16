@@ -7,8 +7,11 @@ namespace evalflow_backend_api.Features.AdminApi.Contract;
 
 public static class AdminContract
 {
-    /// <summary>1.1: the manifest declares actions (write) for callers that can run them.</summary>
-    public const string ContractVersion = "1.1";
+    /// <summary>
+    /// 1.1: the manifest declares actions (write) for callers that can run them. 1.2: and which fields of each resource
+    /// can be edited (edit, PATCH /{resource}/{id}), to the same callers.
+    /// </summary>
+    public const string ContractVersion = "1.2";
 
     public const string ReadScope = "admin:read";
     public const string WriteScope = "admin:write";
@@ -97,7 +100,7 @@ public sealed record InputDefault
     public string? FromField { get; init; }
 }
 
-/// <summary>An action input. Type: string, text, enum, boolean or number.</summary>
+/// <summary>An action input, or an editable field. Type: string, text, enum, boolean or number.</summary>
 public sealed record ActionInputDescriptor(string Key, string Label, string Type, bool Required)
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -123,6 +126,12 @@ public sealed record ActionDescriptor(string Key, string Label, string? Descript
     public ActionAppliesTo? AppliesTo { get; init; }
 }
 
+/// <summary>
+/// What PATCH /{resource}/{id} can change (contract §13.1). Each input's key is a field of the record (the desktop app
+/// fills it with its current value). Confirm: the text shown before saving (always written, null when not needed).
+/// </summary>
+public sealed record EditDescriptor(string? Confirm, IReadOnlyList<ActionInputDescriptor> Inputs);
+
 public sealed record ResourceDescriptor(
     string Key,
     string Label,
@@ -133,7 +142,12 @@ public sealed record ResourceDescriptor(
     ListDescriptor List,
     bool Detail,
     IReadOnlyList<RelationDescriptor> Relations,
-    IReadOnlyList<ActionDescriptor> Actions);
+    IReadOnlyList<ActionDescriptor> Actions)
+{
+    /// <summary>Null (left out) when nothing can be edited, and for callers that can't write.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public EditDescriptor? Edit { get; init; }
+}
 
 public sealed record AdminAppInfo(string Id, string Name, string Version, string Environment);
 
