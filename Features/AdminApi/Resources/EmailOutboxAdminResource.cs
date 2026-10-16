@@ -2,7 +2,9 @@ using System.Linq.Expressions;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Domain.Enums;
 using evalflow_backend_api.Features.AdminApi.Contract;
+using evalflow_backend_api.Infrastructure.BackgroundJobs;
 using evalflow_backend_api.Infrastructure.Database;
+using evalflow_backend_api.Infrastructure.Notifications;
 using Microsoft.EntityFrameworkCore;
 
 namespace evalflow_backend_api.Features.AdminApi.Resources;
@@ -20,11 +22,13 @@ public sealed record EmailOutboxAdminItem(
 
 /// <summary>
 /// The email queue (EmailQueueWorker sends it through Brevo): to see what failed or is still waiting. The body is
-/// encrypted and is never returned.
+/// encrypted and is never returned. Action retry: puts a failed email back in the queue for the worker (it never
+/// sends it from here).
 /// </summary>
-public class EmailOutboxAdminResource(AppDbContext dbContext) : IAdminResource
+public class EmailOutboxAdminResource(AppDbContext dbContext, EmailQueueSignal signal) : IAdminResource
 {
     public const string Key = "email-outbox";
+    public const string RetryAction = "retry";
 
     public static readonly IReadOnlyList<EnumOption> StatusOptions =
     [
@@ -60,7 +64,18 @@ public class EmailOutboxAdminResource(AppDbContext dbContext) : IAdminResource
             ]),
         true,
         [],
-        []);
+        [
+            new ActionDescriptor(
+                RetryAction,
+                "Reintentar envío",
+                "Vuelve a poner el email en la cola para que el worker lo intente otra vez.",
+                null,
+                "default",
+                [])
+            {
+                AppliesTo = new ActionAppliesTo("status", ["failed"]),
+            },
+        ]);
 
     public ResourceDescriptor Descriptor => Definition;
 
@@ -126,5 +141,34 @@ public class EmailOutboxAdminResource(AppDbContext dbContext) : IAdminResource
     {
         if (AdminQueryExtensions.ParseId(id) is not { } messageId) return null;
         return await dbContext.EmailOutboxMessages.AsNoTracking().Where(m => m.Id == messageId).Select(ToItem).FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Back to pending as if it had just been queued: attempts to 0 (a whole new round of
+    /// <see cref="EmailQueueWorker.MaxAttempts"/> with its backoff, not a single try) and due now. The last error stays
+    /// until the worker overwrites it (failure) or clears it (sent), as it does between its own retries. Then the worker
+    /// is woken up.
+    /// </summary>
+    public async Task<object> RunActionAsync(string action, string id, IReadOnlyDictionary<string, object?> inputs, CancellationToken cancellationToken)
+    {
+        if (action != RetryAction) throw AdminApiException.NotFound($"{Key} has no action {action}");
+
+        var messageId = AdminQueryExtensions.ParseId(id) ?? throw AdminApiException.NotFound($"{Key}/{id} doesn't exist");
+        var message = await dbContext.EmailOutboxMessages.FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken)
+                      ?? throw AdminApiException.NotFound($"{Key}/{id} doesn't exist");
+
+        if (message.Status != EmailOutboxStatus.Fallido)
+            throw AdminApiException.Conflict($"Only failed emails can be retried (this one is {StatusValue(message.Status)}).");
+        // Emails that failed before the worker kept the body have nothing left to send: it would go out empty.
+        if (string.IsNullOrEmpty(message.EncryptedHtmlBody))
+            throw AdminApiException.Conflict("The body of this email was discarded: it can't be sent again.");
+
+        message.Status = EmailOutboxStatus.Pendiente;
+        message.Attempts = 0;
+        message.NextAttemptAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        signal.Notify();
+
+        return await GetAsync(id, cancellationToken) ?? throw AdminApiException.NotFound($"{Key}/{id} doesn't exist");
     }
 }

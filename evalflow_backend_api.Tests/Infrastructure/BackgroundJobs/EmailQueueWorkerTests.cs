@@ -73,7 +73,7 @@ public class EmailQueueWorkerTests
     }
 
     [Fact]
-    public async Task ProcessPendingAsync_OnLastAttempt_MarksAsFailedAndClearsBody()
+    public async Task ProcessPendingAsync_OnLastAttempt_MarksAsFailedAndKeepsBodyForARetry()
     {
         using var host = new EmailQueueTestHost();
         host.Sender
@@ -86,7 +86,7 @@ public class EmailQueueWorkerTests
         var stored = Reload(host, message.Id);
         stored.Status.Should().Be(EmailOutboxStatus.Fallido);
         stored.Attempts.Should().Be(EmailQueueWorker.MaxAttempts);
-        stored.EncryptedHtmlBody.Should().BeEmpty();
+        stored.EncryptedHtmlBody.Should().Be("enc:<p>Hola</p>");
     }
 
     [Fact]

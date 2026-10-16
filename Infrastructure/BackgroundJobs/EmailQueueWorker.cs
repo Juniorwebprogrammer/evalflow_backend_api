@@ -106,8 +106,8 @@ public class EmailQueueWorker(IServiceScopeFactory scopeFactory, EmailQueueSigna
 
         if (message.Attempts >= MaxAttempts)
         {
+            // The (encrypted) body stays: the Admin API can put a failed email back in the queue (email-outbox retry).
             message.Status = EmailOutboxStatus.Fallido;
-            message.EncryptedHtmlBody = string.Empty;
             logger.LogError(ex, "EmailQueueWorker: el email {MessageId} a {To} se descarta tras {Attempts} intentos.",
                 message.Id, message.To, message.Attempts);
             return;

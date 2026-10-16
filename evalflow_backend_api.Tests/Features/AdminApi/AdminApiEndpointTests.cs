@@ -6,12 +6,14 @@ using evalflow_backend_api.Domain.Constants;
 using evalflow_backend_api.Domain.Entities;
 using evalflow_backend_api.Domain.Enums;
 using evalflow_backend_api.Features.Admin.CreateAdministrator;
+using evalflow_backend_api.Infrastructure.Notifications;
 using evalflow_backend_api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace evalflow_backend_api.Tests.Features.AdminApi;
 
-/// <summary>Manifest, health, stats, lists, details and the set-plan action of the Admin API (contract §6 and §12).</summary>
+/// <summary>Manifest, health, stats, lists, details and the set-plan and retry actions of the Admin API (contract §6 and §12).</summary>
 public class AdminApiEndpointTests : IntegrationTestBase
 {
     private HttpClient AdminClient(string token)
@@ -152,6 +154,22 @@ public class AdminApiEndpointTests : IntegrationTestBase
         input.GetProperty("required").GetBoolean().Should().BeTrue();
         input.GetProperty("enum").EnumerateArray().Select(o => o.GetProperty("value").GetString())
             .Should().Equal("starter", "professional", "enterprise", "vexxen_sync");
+    }
+
+    [Fact]
+    public async Task Manifest_ShowsRetry_ToOperators_OnlyForFailedEmails()
+    {
+        var manifest = await JsonAsync(await Operator.GetAsync("/admin/v1/manifest"));
+
+        var outbox = manifest.GetProperty("resources").EnumerateArray().Single(r => r.GetProperty("key").GetString() == "email-outbox");
+        var action = outbox.GetProperty("actions").EnumerateArray().Single();
+        action.GetProperty("key").GetString().Should().Be("retry");
+        action.GetProperty("label").GetString().Should().Be("Reintentar envío");
+        action.GetProperty("tone").GetString().Should().Be("default");
+        action.GetProperty("confirm").ValueKind.Should().Be(JsonValueKind.Null);
+        action.GetProperty("inputs").GetArrayLength().Should().Be(0);
+        action.GetProperty("appliesTo").GetProperty("field").GetString().Should().Be("status");
+        action.GetProperty("appliesTo").GetProperty("values").EnumerateArray().Select(v => v.GetString()).Should().Equal("failed");
     }
 
     // --- health and stats ---
@@ -453,5 +471,107 @@ public class AdminApiEndpointTests : IntegrationTestBase
         var response = await Operator.PostAsJsonAsync($"/admin/v1/companies/{seeded.Globex.Id}/actions/set-plan", new { inputs = new { planId = "starter" } });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // --- retry (email-outbox) ---
+
+    private async Task<EmailOutboxMessage> EmailToAsync(string to)
+    {
+        await using var db = Factory.CreateDbContext();
+        return await db.EmailOutboxMessages.SingleAsync(m => m.To == to);
+    }
+
+    [Fact]
+    public async Task Retry_AsViewer_403()
+    {
+        await SeedAsync();
+        var failed = await EmailToAsync("a@acme.com");
+
+        var response = await Viewer.PostAsync($"/admin/v1/email-outbox/{failed.Id}/actions/retry", Inputs(new { }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await JsonAsync(response)).GetProperty("code").GetString().Should().Be("forbidden");
+        (await EmailToAsync("a@acme.com")).Status.Should().Be(EmailOutboxStatus.Fallido);
+    }
+
+    [Theory]
+    [InlineData("b@acme.com", EmailOutboxStatus.Pendiente)]
+    [InlineData("c@acme.com", EmailOutboxStatus.Enviado)]
+    public async Task Retry_AnEmailThatHasntFailed_409Conflict(string to, EmailOutboxStatus status)
+    {
+        await SeedAsync();
+        var email = await EmailToAsync(to);
+
+        var response = await Operator.PostAsync($"/admin/v1/email-outbox/{email.Id}/actions/retry", Inputs(new { }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await JsonAsync(response)).GetProperty("code").GetString().Should().Be("conflict");
+        var stored = await EmailToAsync(to);
+        stored.Status.Should().Be(status);
+        stored.Attempts.Should().Be(email.Attempts);
+    }
+
+    [Fact]
+    public async Task Retry_AFailedEmailWhoseBodyWasDiscarded_409Conflict()
+    {
+        await SeedAsync();
+        await using (var db = Factory.CreateDbContext())
+        {
+            db.EmailOutboxMessages.Add(new EmailOutboxMessage
+            {
+                To = "old@acme.com", Subject = "Invitación", EncryptedHtmlBody = string.Empty, Status = EmailOutboxStatus.Fallido, Attempts = 5,
+            });
+            await db.SaveChangesAsync();
+        }
+        var email = await EmailToAsync("old@acme.com");
+
+        var response = await Operator.PostAsync($"/admin/v1/email-outbox/{email.Id}/actions/retry", Inputs(new { }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await EmailToAsync("old@acme.com")).Status.Should().Be(EmailOutboxStatus.Fallido);
+    }
+
+    [Fact]
+    public async Task Retry_UnknownEmail_404_AndInputs_400()
+    {
+        await SeedAsync();
+        var failed = await EmailToAsync("a@acme.com");
+
+        (await Operator.PostAsync("/admin/v1/email-outbox/999999/actions/retry", Inputs(new { }))).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await Operator.PostAsync($"/admin/v1/email-outbox/{failed.Id}/actions/retry", Inputs(new { force = true })))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Retry_PutsTheFailedEmailBackInTheQueue_ForTheWorker()
+    {
+        await SeedAsync();
+        var failed = await EmailToAsync("a@acme.com");
+        var before = DateTime.UtcNow;
+
+        var response = await Operator.PostAsync($"/admin/v1/email-outbox/{failed.Id}/actions/retry", Inputs(new { }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var item = (await JsonAsync(response)).GetProperty("item");
+        item.GetProperty("id").GetString().Should().Be(failed.Id.ToString());
+        item.GetProperty("status").GetString().Should().Be("pending");
+        item.GetProperty("attempts").GetInt32().Should().Be(0);
+        item.GetProperty("lastError").GetString().Should().Be("Brevo 500", "the worker overwrites or clears it on the next attempt");
+        item.GetProperty("sentAt").ValueKind.Should().Be(JsonValueKind.Null);
+        item.ToString().Should().NotContain("ENCRYPTED");
+
+        // Queued again, not sent from the endpoint: the worker picks it up (pending and due) with its body intact.
+        var stored = await EmailToAsync("a@acme.com");
+        stored.Status.Should().Be(EmailOutboxStatus.Pendiente);
+        stored.Attempts.Should().Be(0);
+        stored.NextAttemptAt.Should().BeOnOrAfter(before).And.BeOnOrBefore(DateTime.UtcNow);
+        stored.EncryptedHtmlBody.Should().Be("ENCRYPTED");
+        stored.SentAt.Should().BeNull();
+
+        // And the worker is woken up instead of waiting for its next poll.
+        var signal = Factory.Services.GetRequiredService<EmailQueueSignal>();
+        var wait = System.Diagnostics.Stopwatch.StartNew();
+        await signal.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+        wait.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
     }
 }
