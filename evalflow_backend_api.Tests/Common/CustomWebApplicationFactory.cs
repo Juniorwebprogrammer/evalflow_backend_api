@@ -1,6 +1,8 @@
+using evalflow_backend_api.Features.AdminApi.Access;
 using evalflow_backend_api.Infrastructure.Database;
 using evalflow_backend_api.Infrastructure.Notifications;
 using evalflow_backend_api.Infrastructure.Vexxen;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +10,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 namespace evalflow_backend_api.Tests.Common;
 
@@ -42,6 +45,8 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("Vexxen:BaseUrl", "http://vexxen.test");
         builder.UseSetting("Vexxen:ClientId", "vexxen_test");
         builder.UseSetting("Vexxen:ApiKey", "test-only-vexxen-api-key");
+        builder.UseSetting("VexxenAdmin:Issuer", VexxenAdminTokens.Issuer);
+        builder.UseSetting("VexxenAdmin:Audience", VexxenAdminTokens.Audience);
 
         builder.ConfigureServices(services =>
         {
@@ -72,6 +77,15 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
             // The reminder job polls the database on a 24h loop; keep it out of test runs.
             services.RemoveAll<IHostedService>();
+
+            // The Admin API scheme trusts the test signing key as if it came from Vexxen's JWKS: a fixed
+            // configuration instead of /.well-known/openid-configuration, so no test reaches the network.
+            services.Configure<JwtBearerOptions>(VexxenAdminAuthentication.Scheme, options =>
+            {
+                var configuration = new OpenIdConnectConfiguration { Issuer = VexxenAdminTokens.Issuer };
+                configuration.SigningKeys.Add(VexxenAdminTokens.SigningKey);
+                options.Configuration = configuration;
+            });
         });
     }
 

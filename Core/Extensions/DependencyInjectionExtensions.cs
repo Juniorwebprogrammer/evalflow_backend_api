@@ -9,6 +9,7 @@ using evalflow_backend_api.Infrastructure.Security.CurrentUserService;
 using evalflow_backend_api.Infrastructure.Security.Encryption;
 using evalflow_backend_api.Infrastructure.Vexxen;
 using evalflow_backend_api.Features.Auth.Vexxen;
+using evalflow_backend_api.Features.AdminApi;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Options;
@@ -57,6 +58,14 @@ public static class DependencyInjectionExtensions
                         var accessToken = context.Request.Query["access_token"];
                         var path = context.HttpContext.Request.Path;
 
+                        // La Admin API (/admin/v1) solo acepta los tokens de Vexxen Administrator (esquema VexxenAdmin):
+                        // el JWT de EvalFlow ni se mira allí.
+                        if (path.StartsWithSegments(AdminApiEndpoints.BasePath))
+                        {
+                            context.NoResult();
+                            return Task.CompletedTask;
+                        }
+
                         if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
                         {
                             context.Token = accessToken;
@@ -68,6 +77,10 @@ public static class DependencyInjectionExtensions
             });
 
         services.AddAuthorization();
+
+        // Admin API para Vexxen Administrator (/admin/v1): su propio esquema JWT ("VexxenAdmin"), que no es el
+        // de por defecto, así que el resto de la API sigue aceptando solo el JWT de EvalFlow.
+        services.AddAdminApi(configuration);
 
         // The frontend's own API routes always call us server-to-server, so
         // they never needed CORS — but the SignalR connection is opened

@@ -1,5 +1,6 @@
 using evalflow_backend_api.Core.Extensions;
 using evalflow_backend_api.Features.Admin.CreateAdministrator;
+using evalflow_backend_api.Features.AdminApi;
 using evalflow_backend_api.Infrastructure.Logging;
 using evalflow_backend_api.Infrastructure.Plans;
 
@@ -19,6 +20,8 @@ if (args.Length > 0 && args[0] == CreateAdministratorCli.Command)
 
 // --- 2. PIPELINE DE PETICIONES HTTP ---
 app.UseMiddleware<RequestLoggingMiddleware>();
+// Admin API (/admin/v1): X-Request-Id, Cache-Control: no-store y errores problem+json, antes de la autenticación.
+app.UseAdminApi();
 
 if (app.Environment.IsDevelopment())
 {

@@ -8,13 +8,14 @@ namespace evalflow_backend_api.Infrastructure.Plans;
 /// <summary>
 /// A company without a plan (none in Vexxen: never bought, trial over, canceled or unpaid) is read-only: its members
 /// can still sign in and see evaluations and results, but every write answers 403 PLAN_INACTIVE. Sessions,
-/// onboarding, the profile, deleting the company and the Administrator stay available.
+/// onboarding, the profile, deleting the company and the Administrator stay available. The Admin API (/admin/v1) is
+/// out of its scope: its caller is Vexxen Administrator, not a member of a company.
 /// </summary>
 public class PlanAccessMiddleware(RequestDelegate next)
 {
     public const string PlanInactiveCode = "PLAN_INACTIVE";
 
-    private static readonly string[] ExemptPrefixes = ["/Auth", "/Onboarding", "/Profile", "/Company/delete", "/hubs"];
+    private static readonly string[] ExemptPrefixes = ["/Auth", "/Onboarding", "/Profile", "/Company/delete", "/hubs", "/admin/v1"];
 
     public async Task InvokeAsync(HttpContext context, AppDbContext dbContext)
     {

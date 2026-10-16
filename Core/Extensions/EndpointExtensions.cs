@@ -1,6 +1,7 @@
 using evalflow_backend_api.Infrastructure.SignalR;
 using evalflow_backend_api.Features.AiAnalysis.GetCycleAiAnalyses;
 using evalflow_backend_api.Features.AiAnalysis.RequestAiAnalysis;
+using evalflow_backend_api.Features.AdminApi;
 using evalflow_backend_api.Features.Auth.GetMyFeatures;
 using evalflow_backend_api.Features.Auth.Vexxen;
 using evalflow_backend_api.Features.Team.GetInvitation;
@@ -174,6 +175,9 @@ public static class EndpointExtensions
 
         // Dashboard
         app.MapGetDashboardStats();
+
+        // Admin API para Vexxen Administrator (solo con el esquema VexxenAdmin)
+        app.MapAdminApi();
 
         return app;
     }

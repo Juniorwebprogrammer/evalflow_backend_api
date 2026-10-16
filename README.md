@@ -40,3 +40,29 @@ dotnet run -- create-admin <email> <nombre> <apellidos>
 - Como todo usuario necesita empresa, los administradores viven en una interna (`IdentificationId` `evalflow-internal`, Enterprise, plan manual, sin usuario de facturación), que se crea la primera vez.
 - Queda como una invitación: se enlaza la primera vez que esa persona entra en EvalFlow con Vexxen usando ese email (necesita una cuenta de Vexxen con él). Caduca a los 30 días; repetir el comando la renueva.
 - Rechaza un email que ya pertenece a una empresa cliente (un email solo puede estar en un sitio).
+
+## Admin API (Vexxen Administrator)
+
+`/admin/v1` es la Admin API que lee y usa **Vexxen Administrator** (la app de escritorio), según el contrato v1.1 (`docs/admin-contract-v1.md` del repo vexxen-administrator). `app.id` = `evalflow`.
+
+| Endpoint | Qué hace |
+| --- | --- |
+| `GET /admin/v1/manifest` | Recursos, campos, filtros y relaciones. Las acciones solo aparecen si el token puede escribir. |
+| `GET /admin/v1/health` | Siempre 200; el estado (`ok` / `down`) y la latencia de la base de datos van en el cuerpo. |
+| `GET /admin/v1/stats` | Empresas (total, por plan y sin plan), usuarios, ciclos activos, evaluaciones completadas en 30 días y emails fallidos/pendientes. |
+| `GET /admin/v1/{resource}` | Lista con `page`, `pageSize` (máx. 100), `q`, `sort` y los filtros del manifest. Un filtro u orden desconocido es `400 invalid_query`. |
+| `GET /admin/v1/{resource}/{id}` | Ficha: `{ item }`. |
+| `POST /admin/v1/{resource}/{id}/actions/{action}` | `{ inputs }` → `{ item }`. Hoy: `companies` / `set-plan` (`planId`: `starter`, `professional`, `enterprise` o `vexxen_sync` para volver a la suscripción de Vexxen), lo mismo que `PUT /Company/{identificationId}/plan`. |
+
+Recursos: `companies`, `users`, `evaluation-cycles` y `email-outbox`. La empresa interna (`evalflow-internal`) y sus usuarios (los Administrators) no aparecen ni cuentan en las estadísticas. Nunca se devuelven tokens de invitación, el cuerpo cifrado de los emails ni otros secretos.
+
+**Autenticación.** Solo con el access token de Vexxen Administrator (esquema JWT `VexxenAdmin`, aparte del JWT de EvalFlow): ES256, `typ` `at+jwt`, `iss` = `VexxenAdmin:Issuer` (las claves se descubren en `{issuer}/.well-known/openid-configuration`), `aud` = `VexxenAdmin:Audience`, `exp`/`nbf` con 60 s de tolerancia. Después: `403 forbidden` sin scope `admin:read` o sin permisos, `403 unsupported_grant` si algún permiso tiene `tenant`, y las acciones necesitan además el scope `admin:write` y el rol `operator`. No pide `X-Api-Key` ni usa CORS. El JWT de EvalFlow no abre `/admin/v1` y el token de administración no abre el resto de la API.
+
+Todas las respuestas llevan `Cache-Control: no-store` y `X-Request-Id` (el que llega o uno nuevo); los errores son `application/problem+json` con `code` y `requestId`. Cada petición y cada acción quedan en el log (`[admin-api]`, con `sub`, email, ruta, query o inputs).
+
+| Variable | Por defecto | Qué es |
+| --- | --- | --- |
+| `VexxenAdmin__Issuer` | `https://vexxen-home.vercel.app` (`http://localhost:3000` en Development) | El Vexxen que firma los tokens (su `APP_URL`). |
+| `VexxenAdmin__Audience` | `evalflow` | El appId de EvalFlow en Vexxen. |
+| `VexxenAdmin__Environment` | `production` / `local` según `ASPNETCORE_ENVIRONMENT` | Opcional: el entorno que dice el manifest. |
+| `APP_VERSION` | la versión del ensamblado | Opcional: la versión que dicen el manifest y `/health`. |
